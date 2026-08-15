@@ -1,0 +1,7 @@
+FROM ubuntu:24.04
+
+# mainarch benchmark container used by the host-engine loop.
+COPY target/release/mainarch /usr/local/bin/mainarch
+
+ENTRYPOINT ["/usr/local/bin/mainarch"]
+

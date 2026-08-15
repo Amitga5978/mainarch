@@ -1,0 +1,15 @@
+target/
+**/*.rs.bk
+*.pdb
+.DS_Store
+perf.data*
+
+# local environment / editor state
+.env
+.venv/
+.idea/
+.vscode/
+
+# python bytecode
+__pycache__/
+*.pyc

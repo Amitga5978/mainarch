@@ -1,0 +1,65 @@
+receipt.kind=model_runtime_launch_submission_gate
+receipt.version=1
+target=mi355x-gfx950-raw-kfd-aql
+code_object_target=amdgcn-amd-amdhsa--gfx950
+code_object_sha256=4eadcc97a2035ce520913ec92986c91f3512a653439a269aed86a61792e7c185
+dispatch_count=36
+window_count=7
+request_plan_ready=true
+execution_readiness_ready=false
+all_components_applied=false
+all_live_aql_proof_validations_applied=false
+no_live_aql_submission_side_effects=true
+no_live_queue_mutation=true
+component_pending_count=378
+live_aql_proof_validation_pending_count=2
+live_aql_submitting_surface_count=0
+live_queue_mutating_component_count=0
+execution_blocker_count=9
+submission_blocker_count=11
+submission_ready=false
+blockers.count=11
+blockers.0.source=execution_readiness
+blockers.0.requirement=kernel_candidate_selection_policy
+blockers.0.pending_count=0
+blockers.0.detail=24 ambiguous and 0 missing dispatch(es) still require an applied kernel selection policy; recommendations=14 missing_recommendations=22 selection_requests=14 missing_requests=22 applied=0
+blockers.1.source=execution_readiness
+blockers.1.requirement=host_launcher_runtime_branch_resolution
+blockers.1.pending_count=0
+blockers.1.detail=24 dispatch(es) still expose conservative host-launcher candidate sets; branch_resolution_requests=24 applied=0 unresolved_candidate_symbols=40
+blockers.2.source=execution_readiness
+blockers.2.requirement=loaded_code_object_base
+blockers.2.pending_count=0
+blockers.2.detail=36 kernel_object relocation binding request(s) are pending until the code object is loaded; load_requests=1 loaded=0 base_requests=1 base_bound=0 descriptor_requests=44 descriptor_bound=0 relocation_bound=0
+blockers.3.source=execution_readiness
+blockers.3.requirement=kernarg_allocation
+blockers.3.pending_count=0
+blockers.3.detail=36 kernarg_address relocation binding request(s) require allocated kernarg backing; allocation_requests=1 request_bytes=3600 bound_bytes=0 copy_requests=36 copied_bytes=0
+blockers.4.source=execution_readiness
+blockers.4.requirement=kernel_argument_abi_verification
+blockers.4.pending_count=0
+blockers.4.detail=258 ordered launch argument(s) have canonical offsets; verified dispatches=14/36 missing_verified_dispatches=22; size-compatible candidate ABI(s)=68/147; named descriptor schemas bound=44/44; verification_requests=147 verified=68; capacity_requests=14 candidate_capacity_requests=61 max_capacity_shortfall_bytes=52 total_capacity_shortfall_bytes=1356
+blockers.5.source=execution_readiness
+blockers.5.requirement=kernel_argument_abi_semantic_projection
+blockers.5.pending_count=0
+blockers.5.detail=31 projection-ready kernel argument ABI candidate(s) cover 20/36 dispatch(es); missing_ready_dispatches=16; selection_requests=20 missing_selection_requests=16 requested_projected_kernarg_bytes=656 selection_applied=0; schema_candidates=147 missing_schema_candidates=0 descriptor_matches=147 field_schemas=1028 projected_fields=530 missing_fields=492 kind_mismatches=6 unsupported_encodings=0 scalar_narrowing_overflows=0 field_range_overflows=0 projected_kernarg_bytes=20284
+blockers.6.source=execution_readiness
+blockers.6.requirement=completion_signal_binding
+blockers.6.pending_count=0
+blockers.6.detail=36 completion_signal relocation binding request(s) are planned but not bound to HSA signal handles; signal_requests=7 bound_handles=0
+blockers.7.source=execution_readiness
+blockers.7.requirement=queue_reservation
+blockers.7.pending_count=0
+blockers.7.detail=36 queue packet reservation request(s) across 7 doorbell batch(es) remain unreserved; reserved_packets=0 applied_windows=0
+blockers.8.source=execution_readiness
+blockers.8.requirement=aql_packet_materialization
+blockers.8.pending_count=0
+blockers.8.detail=2304 dispatchable packet byte(s) still require selected kernel candidates and live relocation patching; selected byte templates=12 ambiguous dispatches=24 live relocation sites=108 binding_requests=108 bound_bindings=0
+blockers.9.source=execution_request_plan
+blockers.9.requirement=runtime_request_components
+blockers.9.pending_count=378
+blockers.9.detail=378 runtime request component application(s) are still pending
+blockers.10.source=live_aql_proof_surfaces
+blockers.10.requirement=live_aql_proof_validation
+blockers.10.pending_count=2
+blockers.10.detail=2 live AQL proof validation request(s) are still pending

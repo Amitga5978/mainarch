@@ -1,0 +1,6 @@
+receipt.kind=model_api_contract
+receipt.version=1
+name=mainarch-model-api
+version=0.1.0
+stability=pre1-static-metadata
+live_execution_supported=false

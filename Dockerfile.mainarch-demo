@@ -1,0 +1,18 @@
+FROM docker.io/library/python:3.12-slim
+
+LABEL org.opencontainers.image.title="mainarch demo sandbox"
+LABEL org.opencontainers.image.description="Playable one-page mainarch serving sandbox over /v1/chat/completions"
+
+ENV MAINARCH_DEMO_BIND=0.0.0.0:8080
+ENV MAINARCH_DEMO_NODE=2
+ENV MAINARCH_DEMO_MODE=scripted
+
+WORKDIR /app
+COPY target/release/mainarch /usr/local/bin/mainarch
+COPY demo/sandbox /app/demo/sandbox
+COPY tools/demo_container_entrypoint.sh /usr/local/bin/demo-container-entrypoint
+
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/demo-container-entrypoint"]
+CMD ["serve"]

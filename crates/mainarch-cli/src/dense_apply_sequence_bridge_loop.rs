@@ -1,0 +1,9651 @@
+use anyhow::Result;
+
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_SOURCE_IDLE: &str =
+    "phase_executor_idle";
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_SOURCE_BEGIN:
+    &str = "phase_executor_begin";
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_SOURCE_CHECKPOINT_GATE_READY:
+    &str = "phase_executor_checkpoint_gate_ready";
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_ROW_COUNT: usize = 3;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_ROW_COUNT: usize = 3;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT: usize =
+    2;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_INDEX: usize = 0;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_FIRST_CHECKPOINT_GATE_INDEX:
+    usize = 1;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SECOND_CHECKPOINT_GATE_INDEX:
+    usize = 2;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_FIRST_PHASE_INDEX: usize = 0;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SECOND_PHASE_INDEX: usize = 1;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_THIRD_PHASE_INDEX: usize = 2;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_ROW_CONTROLS_BRIDGE_CONTEXT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowBridgeRunContextControlState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowBridgeRunContextControlState::from_controls(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_ROW_CONTROLS_CHECKPOINT_INVOCATION:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCheckpointInvocationControlState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCheckpointInvocationControlState::from_controls(false);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_CONTROLS_BRIDGE_CONTEXT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowBridgeRunContextControlState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowBridgeRunContextControlState::from_controls(false);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_CONTROLS_CHECKPOINT_INVOCATION:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCheckpointInvocationControlState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCheckpointInvocationControlState::from_controls(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_FIRST_PHASE_READY_STEP_COUNT:
+    usize = 1;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SECOND_PHASE_READY_STEP_COUNT:
+    usize = 2;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_THIRD_PHASE_READY_STEP_COUNT:
+    usize = 3;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_CURSOR_ADVANCE_STEP: usize =
+    1;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_CURSOR_ADVANCE_STEP:
+    usize = 1;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_DRAINED_STEP_ADVANCE:
+    usize = 1;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_READINESS_CURSOR_ADVANCE_STEP:
+    usize = 1;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_INITIAL_ACTIVE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeActiveState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeActiveState::from_active_state(
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveState::Idle,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_BEGIN_ACTIVE_STATE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeActiveState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeActiveState::from_active_state(
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveState::Active,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_COMPLETE_ACTIVE_STATE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeActiveState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeActiveState::from_active_state(
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveState::Idle,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_INITIAL_CURSOR:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor::from_index(0);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_INITIAL_READY_STEP_COUNT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount::from_count(0);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_READY_DRAIN_INITIAL_CURSOR_AT_BEGIN:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor::from_index(0);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_READY_DRAIN_INITIAL_DRAINED_STEP_COUNT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCount =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCount::from_count(0);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_READY_DRAIN_RESET_DRAINED_STEP_COUNT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCount =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCount::from_count(0);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_INITIAL_PHASE_INDEX:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor::from_index(0);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_INITIAL_CHECKPOINT_READINESS_CURSOR:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor::from_index(0);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_BODY_OPEN_SCOPE_DRAINS_CONTROLLER_READY:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainDecisionState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainDecisionState::from_enabled(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_BODY_CLOSE_AFTER_SCOPE_DRAINS_CONTROLLER_READY:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainDecisionState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainDecisionState::from_enabled(false);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_BODY_OPEN_CONTROLLER_READY_DRAIN_PERFORMED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainResultState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainResultState::from_enabled(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_BODY_OPEN_CONTROLLER_READY_DRAIN_SKIPPED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainResultState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainResultState::from_enabled(false);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_TABLE_USED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseTableUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseTableUsageState::from_used(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_USED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableUsageState::from_used(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_BOUND_TO_PHASE_TABLE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableBoundToPhaseTableState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableBoundToPhaseTableState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_ROWS_COVER_ALL_PHASE_ROWS:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableRowsCoverAllPhaseRowsState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableRowsCoverAllPhaseRowsState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_REPRESENTS_ALL_BRIDGE_GATES:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableRepresentsAllBridgeGatesState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableRepresentsAllBridgeGatesState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_STAGE_READY:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateStageReadyState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateStageReadyState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_OUTPUT_RANKS_VALID:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateOutputRanksValidState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateOutputRanksValidState::from_satisfied(
+        true,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_DESCRIPTOR_USED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateDescriptorUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateDescriptorUsageState::from_satisfied(
+        true,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_DESCRIPTOR_CONTROLS_BRIDGE_CONTEXT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateDescriptorControlsBridgeContextState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateDescriptorControlsBridgeContextState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READINESS_TABLE_USED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessTableUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessTableUsageState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROWS_DERIVE_GATE_DESCRIPTORS:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateRowsDeriveGateDescriptorsState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateRowsDeriveGateDescriptorsState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_DESCRIPTOR_DERIVED_FROM_GATE_TABLE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDescriptorDerivedFromGateTableState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDescriptorDerivedFromGateTableState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READINESS_ROW_OWNS_GATE_DESCRIPTOR:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowOwnsGateDescriptorState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowOwnsGateDescriptorState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_BUILT_FROM_READINESS_ROW:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateBuiltFromReadinessRowState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateBuiltFromReadinessRowState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_BUILT_FROM_READINESS_CURSOR_STEP:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateBuiltFromReadinessCursorStepState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateBuiltFromReadinessCursorStepState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READINESS_CURSOR_STEP_USED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStepUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStepUsageState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_CURSOR_PASSES_READINESS_ROW:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateCursorPassesReadinessRowState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateCursorPassesReadinessRowState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READY_STEP_USED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStepUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStepUsageState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_DESCRIPTOR_USED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDescriptorUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDescriptorUsageState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_CONTROLS_CHECKPOINT_INVOCATION:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateControlsCheckpointInvocationState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateControlsCheckpointInvocationState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_BODY_METADATA_USED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyMetadataUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyMetadataUsageState::from_used(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_BODY_COUNTS_FROM_TABLES:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCountTableSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCountTableSourceState::from_tables(
+        true,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_BEGIN_PHASE_COUNT_FROM_RUN_BODY_PLAN:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopBeginPhaseCountRunBodyPlanSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopBeginPhaseCountRunBodyPlanSourceState::from_run_body_plan(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_PHASE_COUNT_FROM_RUN_BODY_PLAN:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointPhaseCountRunBodyPlanSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointPhaseCountRunBodyPlanSourceState::from_run_body_plan(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_COMPLETION_COUNTS_FROM_RUN_BODY_PLAN:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionCountRunBodyPlanSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionCountRunBodyPlanSourceState::from_run_body_plan(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_COMPLETION_GUARD_USED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionGuardState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionGuardState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONSUMED_ALL_PHASE_ROWS:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllPhaseRowsState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllPhaseRowsState::from_satisfied(
+        true,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONSUMED_ALL_GATE_ROWS:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllGateRowsState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllGateRowsState::from_satisfied(
+        true,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONSUMED_ALL_CHECKPOINT_GATE_READINESS_ROWS:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllCheckpointGateReadinessRowsState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllCheckpointGateReadinessRowsState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_STEP_CURSOR_REACHED_STEP_COUNT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopStepCursorReachedStepCountState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopStepCursorReachedStepCountState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_READY_COUNT_REACHED_STEP_COUNT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyCountReachedStepCountState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyCountReachedStepCountState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_DRIVER_USED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDriverUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDriverUsageState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READINESS_CURSOR_USED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorUsageState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_CONSTRUCTION_TABLE_DRIVEN:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateConstructionTableDrivenState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateConstructionTableDrivenState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_EXPLICIT_CHECKPOINT_GATE_BUILDER_LITERALS_REMOVED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExplicitCheckpointGateBuilderLiteralsRemovedState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExplicitCheckpointGateBuilderLiteralsRemovedState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONSUMED_MATCHING_GATE_DESCRIPTOR:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedMatchingGateDescriptorState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedMatchingGateDescriptorState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_DESCRIPTOR_BOUND_TO_PHASE_TABLE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateDescriptorBoundToPhaseTableState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateDescriptorBoundToPhaseTableState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_HELPER_INDEXED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateHelperIndexingState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateHelperIndexingState::from_indexed(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_SPECIFIC_CHECKPOINT_GATE_HELPERS_REMOVED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseSpecificCheckpointGateHelpersRemovalState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseSpecificCheckpointGateHelpersRemovalState::from_removed(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_ALL_CHECKPOINT_BODIES_OWNED_BY_PHASE_EXECUTOR:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointBodyOwnershipState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointBodyOwnershipState::from_owned(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE0_CHECKPOINT_BODY_OWNED_BY_BEGIN:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCheckpointBodyOwnershipState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCheckpointBodyOwnershipState::from_owned(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE1_CHECKPOINT_BODY_OWNED_BY_GATE_READY:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCheckpointBodyOwnershipState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCheckpointBodyOwnershipState::from_owned(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE2_CHECKPOINT_BODY_OWNED_BY_GATE_READY:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCheckpointBodyOwnershipState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCheckpointBodyOwnershipState::from_owned(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE0_CHECKPOINT_INVOCATION_MOVED_INTO_BEGIN:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase0CheckpointInvocationPlacementState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase0CheckpointInvocationPlacementState::from_moved_into_begin(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_IDLE_ENTRY_COUNT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeEntryCountState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeEntryCountState::from_entry_count(
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEntryCount::Idle,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_ACTIVE_ENTRY_COUNT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeEntryCountState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeEntryCountState::from_entry_count(
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEntryCount::SingleRunEntry,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_REMAINING_INTERLEAVED_CHECKPOINT_COUNT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRemainingInterleavedCheckpointCount =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRemainingInterleavedCheckpointCount::from_count(0);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_MAIN_ENTRY_CALLSITE_COUNT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorMainEntryCallsiteCountState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorMainEntryCallsiteCountState::from_entry_count(
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEntryCount::SingleRunEntry,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_CHECKPOINT_INVOCATIONS_REMAIN_INTERLEAVED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationInterleavingState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationInterleavingState::from_remain_interleaved(false);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_ENCLOSING_RUN_USED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunState::from_used(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_SINGLE_RUN_ENTRY:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorSingleRunEntryState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorSingleRunEntryState::from_satisfied(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_ENCLOSING_RUN_CLOSED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunClosedState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunClosedState::from_closed(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_ACTIVE_AFTER_COMPLETE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveAfterCompleteState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveAfterCompleteState::from_active_state(
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveState::Idle,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_RUN_BODY_DRIVER_USED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyDriverState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyDriverState::from_used(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_BEGIN_OWNED_BY_RUN_BODY_DRIVER:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyDriverBeginOwnershipState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyDriverBeginOwnershipState::from_owned(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_ENCLOSING_RUN_ACTIVE_DURING_CHECKPOINT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunCheckpointState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunCheckpointState::from_active(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_CHECKPOINT_INVOCATION_OWNED_BY_ENCLOSING_RUN:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationOwnershipState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationOwnershipState::from_owned(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_OWNS_PHASE_ADVANCE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPhaseAdvanceOwnershipState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPhaseAdvanceOwnershipState::from_owned(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_CHECKPOINT_CALLSITE_ROUTED_THROUGH_PHASE_EXECUTOR:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointCallsiteRoutingState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointCallsiteRoutingState::from_routed(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_READY_STEP_COUNT_FROM_PHASE_TABLE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorReadyStepPhaseTableState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorReadyStepPhaseTableState::from_phase_table(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_RUN_GATE_SEPARATE_FROM_CHECKPOINT_GATES:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableSeparationState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableSeparationState::from_separate(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_CURSOR_BOUND_TO_CHECKPOINT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursorCheckpointBindingState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursorCheckpointBindingState::from_bound(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_NO_ARGUMENT_READY_CHECKPOINT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopNoArgumentReadyCheckpointState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopNoArgumentReadyCheckpointState::from_no_argument(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_BOUND_TO_EXISTING_GATE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointExistingGateBindingState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointExistingGateBindingState::from_bound_to_existing_gate(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_READY_DRAIN_ACTIVE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainActiveState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainActiveState::from_active(
+        true,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_STEP_INDEX_DERIVED_FROM_CURSOR:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepIndexCursorDerivationState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepIndexCursorDerivationState::from_derived(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_HELPER_INVOCATION_BOUND_TO_CONTROLLER_CURSOR:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopHelperInvocationControllerCursorBindingState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopHelperInvocationControllerCursorBindingState::from_bound(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_DIRECT_HELPER_INVOCATION_REPLACED_BY_CONTROLLER_STEP:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDirectHelperInvocationControllerStepReplacementState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDirectHelperInvocationControllerStepReplacementState::from_replaced(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_DIRECT_CONTROLLER_NEXT_INVOCATIONS_REMOVED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDirectControllerNextInvocationRemovalState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDirectControllerNextInvocationRemovalState::from_removed(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_EXPLICIT_CONTROLLER_STEP_LITERALS_REMOVED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExplicitControllerStepLiteralsRemovalState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExplicitControllerStepLiteralsRemovalState::from_removed(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_CURSOR_VALIDATED_AGAINST_STEP_COUNT:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursorStepCountValidationState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursorStepCountValidationState::from_validated(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_CURSOR_ADVANCES_BEFORE_SHARED_DRIVER:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursorSharedDriverAdvanceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursorSharedDriverAdvanceState::from_advances_before_shared_driver(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_STEP_DISPATCHED_BY_READY_DRAIN_LOOP:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepReadyDrainDispatchState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepReadyDrainDispatchState::from_dispatched_by_ready_drain_loop(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SHARED_DRIVER_CALLSITE_USED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopSharedDriverCallsiteUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopSharedDriverCallsiteUsageState::from_used(
+        true,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_MAIN_APPLY_SEQUENCE_DRIVER_CALLSITES_COLLAPSED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopMainApplySequenceDriverCallsiteCollapseState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopMainApplySequenceDriverCallsiteCollapseState::from_collapsed(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_MAIN_APPLY_SEQUENCE_BUFFER_WINDOW_CALLSITES_COLLAPSED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopMainApplySequenceBufferWindowCallsiteCollapseState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopMainApplySequenceBufferWindowCallsiteCollapseState::from_collapsed(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_INTERLEAVED_BRIDGE_WORK_PRESERVED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopInterleavedBridgeWorkPreservationState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopInterleavedBridgeWorkPreservationState::from_preserved(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATES_REMAIN_INTERLEAVED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateInterleavingState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateInterleavingState::from_remain_interleaved(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SEQUENCE_LOOP_STARTED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopSequenceLoopStartState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopSequenceLoopStartState::from_started(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_EXECUTION_PATH_CHANGED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExecutionPathChangeState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExecutionPathChangeState::from_changed(
+        false,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_HIP_GRAPH_CAPTURE_STARTED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopHipGraphCaptureStartState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopHipGraphCaptureStartState::from_started(
+        false,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_LAYER_SPECIFIC_BODY_INLINE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopLayerSpecificBodyInlineState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopLayerSpecificBodyInlineState::from_inline(
+        true,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_COMPLETION_ORDER_PRESERVED_INSIDE_BODY:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionOrderPreservationState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionOrderPreservationState::from_preserved(true);
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_BODY_WRAPPER_AVOIDED:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopBodyWrapperAvoidanceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopBodyWrapperAvoidanceState::from_avoided(
+        true,
+    );
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveState {
+    Idle,
+    Active,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveState {
+    fn active(self) -> bool {
+        matches!(self, Self::Active)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveLifecycleState<Kind> {
+    active_state: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveState,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind>
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveLifecycleState<Kind>
+{
+    const fn from_active_state(
+        active_state: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveState,
+    ) -> Self {
+        Self {
+            active_state,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn active(self) -> bool {
+        self.active_state.active()
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeActiveKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeActiveState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveLifecycleState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeActiveKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveAfterCompleteKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveAfterCompleteState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveLifecycleState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveAfterCompleteKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationInterleavingState
+{
+    remain_interleaved: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationInterleavingState {
+    const fn from_remain_interleaved(remain_interleaved: bool) -> Self {
+        Self { remain_interleaved }
+    }
+
+    fn remain_interleaved(self) -> bool {
+        self.remain_interleaved
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunState {
+    used: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunState {
+    const fn from_used(used: bool) -> Self {
+        Self { used }
+    }
+
+    fn used(self) -> bool {
+        self.used
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyDriverState {
+    used: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyDriverState {
+    const fn from_used(used: bool) -> Self {
+        Self { used }
+    }
+
+    fn used(self) -> bool {
+        self.used
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyDriverBeginOwnershipState
+{
+    owned: bool,
+}
+
+impl
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyDriverBeginOwnershipState
+{
+    const fn from_owned(owned: bool) -> Self {
+        Self { owned }
+    }
+
+    fn owned(self) -> bool {
+        self.owned
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunClosedState {
+    closed: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunClosedState {
+    const fn from_closed(closed: bool) -> Self {
+        Self { closed }
+    }
+
+    fn closed(self) -> bool {
+        self.closed
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunCheckpointState {
+    active: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunCheckpointState {
+    const fn from_active(active: bool) -> Self {
+        Self { active }
+    }
+
+    fn active(self) -> bool {
+        self.active
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationOwnershipState
+{
+    owned: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationOwnershipState {
+    const fn from_owned(owned: bool) -> Self {
+        Self { owned }
+    }
+
+    fn owned(self) -> bool {
+        self.owned
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSourcePredicateState<
+    Kind,
+> {
+    inside_source: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind>
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSourcePredicateState<
+        Kind,
+    >
+{
+    const fn from_inside_source(inside_source: bool) -> Self {
+        Self {
+            inside_source,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn inside_source(self) -> bool {
+        self.inside_source
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginCheckpointInvocationSourceKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginCheckpointInvocationSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSourcePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginCheckpointInvocationSourceKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorGateReadyCheckpointInvocationSourceKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorGateReadyCheckpointInvocationSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSourcePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorGateReadyCheckpointInvocationSourceKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPhaseAdvanceOwnershipState {
+    owned: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPhaseAdvanceOwnershipState {
+    const fn from_owned(owned: bool) -> Self {
+        Self { owned }
+    }
+
+    fn owned(self) -> bool {
+        self.owned
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointCallsiteRoutingState
+{
+    routed: bool,
+}
+
+impl
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointCallsiteRoutingState
+{
+    const fn from_routed(routed: bool) -> Self {
+        Self { routed }
+    }
+
+    fn routed(self) -> bool {
+        self.routed
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorReadyStepPhaseTableState {
+    from_phase_table: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorReadyStepPhaseTableState {
+    const fn from_phase_table(from_phase_table: bool) -> Self {
+        Self { from_phase_table }
+    }
+
+    fn sourced_from_phase_table(self) -> bool {
+        self.from_phase_table
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableSeparationState {
+    separate: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableSeparationState {
+    const fn from_separate(separate: bool) -> Self {
+        Self { separate }
+    }
+
+    fn separates_run_gate_from_checkpoint_gates(self) -> bool {
+        self.separate
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateHelperIndexingState {
+    indexed: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateHelperIndexingState {
+    const fn from_indexed(indexed: bool) -> Self {
+        Self { indexed }
+    }
+
+    fn indexed_checkpoint_gate_helper_used(self) -> bool {
+        self.indexed
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseSpecificCheckpointGateHelpersRemovalState
+{
+    removed: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseSpecificCheckpointGateHelpersRemovalState {
+    const fn from_removed(removed: bool) -> Self {
+        Self { removed }
+    }
+
+    fn phase_specific_checkpoint_gate_helpers_removed(self) -> bool {
+        self.removed
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointBodyOwnershipState {
+    owned: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointBodyOwnershipState {
+    const fn from_owned(owned: bool) -> Self {
+        Self { owned }
+    }
+
+    fn all_checkpoint_bodies_owned_by_phase_executor(self) -> bool {
+        self.owned
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCheckpointBodyOwnershipState {
+    owned: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCheckpointBodyOwnershipState {
+    const fn from_owned(owned: bool) -> Self {
+        Self { owned }
+    }
+
+    fn owned(self) -> bool {
+        self.owned
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase0CheckpointInvocationPlacementState {
+    moved_into_begin: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase0CheckpointInvocationPlacementState {
+    const fn from_moved_into_begin(moved_into_begin: bool) -> Self {
+        Self { moved_into_begin }
+    }
+
+    fn moved_into_begin(self) -> bool {
+        self.moved_into_begin
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase2PreCheckpointPreparePreservationState
+{
+    preserved: bool,
+}
+
+impl
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase2PreCheckpointPreparePreservationState
+{
+    const fn from_preserved(preserved: bool) -> Self {
+        Self { preserved }
+    }
+
+    fn phase2_pre_checkpoint_prepare_preserved(self) -> bool {
+        self.preserved
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursorCheckpointBindingState {
+    bound: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursorCheckpointBindingState {
+    const fn from_bound(bound: bool) -> Self {
+        Self { bound }
+    }
+
+    fn bound_to_checkpoint(self) -> bool {
+        self.bound
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopNoArgumentReadyCheckpointState {
+    no_argument: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopNoArgumentReadyCheckpointState {
+    const fn from_no_argument(no_argument: bool) -> Self {
+        Self { no_argument }
+    }
+
+    fn no_argument_ready_checkpoint(self) -> bool {
+        self.no_argument
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointExistingGateBindingState {
+    bound_to_existing_gate: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointExistingGateBindingState {
+    const fn from_bound_to_existing_gate(bound_to_existing_gate: bool) -> Self {
+        Self {
+            bound_to_existing_gate,
+        }
+    }
+
+    fn bound_to_existing_gate(self) -> bool {
+        self.bound_to_existing_gate
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainActiveState {
+    active: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainActiveState {
+    const fn from_active(active: bool) -> Self {
+        Self { active }
+    }
+
+    fn active(self) -> bool {
+        self.active
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepIndexCursorDerivationState {
+    derived_from_cursor: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepIndexCursorDerivationState {
+    const fn from_derived(derived_from_cursor: bool) -> Self {
+        Self {
+            derived_from_cursor,
+        }
+    }
+
+    fn derived_from_cursor(self) -> bool {
+        self.derived_from_cursor
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopHelperInvocationControllerCursorBindingState
+{
+    bound: bool,
+}
+
+impl
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopHelperInvocationControllerCursorBindingState
+{
+    const fn from_bound(bound: bool) -> Self {
+        Self { bound }
+    }
+
+    fn bound_to_controller_cursor(self) -> bool {
+        self.bound
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDirectHelperInvocationControllerStepReplacementState
+{
+    replaced: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDirectHelperInvocationControllerStepReplacementState {
+    const fn from_replaced(replaced: bool) -> Self {
+        Self { replaced }
+    }
+
+    fn replaced_by_controller_step(self) -> bool {
+        self.replaced
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDirectControllerNextInvocationRemovalState
+{
+    removed: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDirectControllerNextInvocationRemovalState {
+    const fn from_removed(removed: bool) -> Self {
+        Self { removed }
+    }
+
+    fn removed(self) -> bool {
+        self.removed
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExplicitControllerStepLiteralsRemovalState
+{
+    removed: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExplicitControllerStepLiteralsRemovalState {
+    const fn from_removed(removed: bool) -> Self {
+        Self { removed }
+    }
+
+    fn removed(self) -> bool {
+        self.removed
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursorStepCountValidationState {
+    validated: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursorStepCountValidationState {
+    const fn from_validated(validated: bool) -> Self {
+        Self { validated }
+    }
+
+    fn validated_against_step_count(self) -> bool {
+        self.validated
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursorSharedDriverAdvanceState {
+    advances_before_shared_driver: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursorSharedDriverAdvanceState {
+    const fn from_advances_before_shared_driver(advances_before_shared_driver: bool) -> Self {
+        Self {
+            advances_before_shared_driver,
+        }
+    }
+
+    fn advances_before_shared_driver(self) -> bool {
+        self.advances_before_shared_driver
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepReadyDrainDispatchState {
+    dispatched_by_ready_drain_loop: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepReadyDrainDispatchState {
+    const fn from_dispatched_by_ready_drain_loop(dispatched_by_ready_drain_loop: bool) -> Self {
+        Self {
+            dispatched_by_ready_drain_loop,
+        }
+    }
+
+    fn dispatched_by_ready_drain_loop(self) -> bool {
+        self.dispatched_by_ready_drain_loop
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopSharedDriverCallsiteUsageState {
+    used: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopSharedDriverCallsiteUsageState {
+    const fn from_used(used: bool) -> Self {
+        Self { used }
+    }
+
+    fn used(self) -> bool {
+        self.used
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopMainApplySequenceDriverCallsiteCollapseState
+{
+    collapsed: bool,
+}
+
+impl
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopMainApplySequenceDriverCallsiteCollapseState
+{
+    const fn from_collapsed(collapsed: bool) -> Self {
+        Self { collapsed }
+    }
+
+    fn collapsed(self) -> bool {
+        self.collapsed
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopMainApplySequenceBufferWindowCallsiteCollapseState
+{
+    collapsed: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopMainApplySequenceBufferWindowCallsiteCollapseState {
+    const fn from_collapsed(collapsed: bool) -> Self {
+        Self { collapsed }
+    }
+
+    fn collapsed(self) -> bool {
+        self.collapsed
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopInterleavedBridgeWorkPreservationState {
+    preserved: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopInterleavedBridgeWorkPreservationState {
+    const fn from_preserved(preserved: bool) -> Self {
+        Self { preserved }
+    }
+
+    fn preserved(self) -> bool {
+        self.preserved
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateInterleavingState {
+    remain_interleaved: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateInterleavingState {
+    const fn from_remain_interleaved(remain_interleaved: bool) -> Self {
+        Self { remain_interleaved }
+    }
+
+    fn remain_interleaved(self) -> bool {
+        self.remain_interleaved
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopSequenceLoopStartState {
+    started: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopSequenceLoopStartState {
+    const fn from_started(started: bool) -> Self {
+        Self { started }
+    }
+
+    fn started(self) -> bool {
+        self.started
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExecutionPathChangeState {
+    changed: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExecutionPathChangeState {
+    const fn from_changed(changed: bool) -> Self {
+        Self { changed }
+    }
+
+    fn changed(self) -> bool {
+        self.changed
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopHipGraphCaptureStartState {
+    started: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopHipGraphCaptureStartState {
+    const fn from_started(started: bool) -> Self {
+        Self { started }
+    }
+
+    fn started(self) -> bool {
+        self.started
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopLayerSpecificBodyInlineState {
+    inline: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopLayerSpecificBodyInlineState {
+    const fn from_inline(inline: bool) -> Self {
+        Self { inline }
+    }
+
+    fn inline(self) -> bool {
+        self.inline
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionOrderPreservationState {
+    preserved: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionOrderPreservationState {
+    const fn from_preserved(preserved: bool) -> Self {
+        Self { preserved }
+    }
+
+    fn preserved(self) -> bool {
+        self.preserved
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopBodyWrapperAvoidanceState {
+    avoided: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopBodyWrapperAvoidanceState {
+    const fn from_avoided(avoided: bool) -> Self {
+        Self { avoided }
+    }
+
+    fn avoided(self) -> bool {
+        self.avoided
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyMetadataUsageState {
+    used: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyMetadataUsageState {
+    const fn from_used(used: bool) -> Self {
+        Self { used }
+    }
+
+    fn used(self) -> bool {
+        self.used
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTableUsageState<Kind> {
+    used: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTableUsageState<Kind> {
+    const fn from_used(used: bool) -> Self {
+        Self {
+            used,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn used(self) -> bool {
+        self.used
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseTableUsageKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseTableUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTableUsageState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseTableUsageKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableUsageKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTableUsageState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableUsageKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTablePredicateState<Kind> {
+    satisfied: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTablePredicateState<Kind> {
+    const fn from_satisfied(satisfied: bool) -> Self {
+        Self {
+            satisfied,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn satisfied(self) -> bool {
+        self.satisfied
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableBoundToPhaseTableKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableBoundToPhaseTableState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTablePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableBoundToPhaseTableKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableRowsCoverAllPhaseRowsKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableRowsCoverAllPhaseRowsState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTablePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableRowsCoverAllPhaseRowsKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableRepresentsAllBridgeGatesKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableRepresentsAllBridgeGatesState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTablePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableRepresentsAllBridgeGatesKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePredicateState<Kind> {
+    satisfied: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePredicateState<Kind> {
+    const fn from_satisfied(satisfied: bool) -> Self {
+        Self {
+            satisfied,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn satisfied(self) -> bool {
+        self.satisfied
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateStageReadyKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateStageReadyState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateStageReadyKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateOutputRanksValidKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateOutputRanksValidState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateOutputRanksValidKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateDescriptorUsageKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateDescriptorUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateDescriptorUsageKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateDescriptorControlsBridgeContextKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateDescriptorControlsBridgeContextState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateDescriptorControlsBridgeContextKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessTablePredicateState<
+    Kind,
+> {
+    satisfied: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind>
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessTablePredicateState<
+        Kind,
+    >
+{
+    const fn from_satisfied(satisfied: bool) -> Self {
+        Self {
+            satisfied,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn satisfied(self) -> bool {
+        self.satisfied
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessTableUsageKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessTableUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessTablePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessTableUsageKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateRowsDeriveGateDescriptorsKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateRowsDeriveGateDescriptorsState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessTablePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateRowsDeriveGateDescriptorsKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDescriptorDerivedFromGateTableKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDescriptorDerivedFromGateTableState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessTablePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDescriptorDerivedFromGateTableKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowOwnsGateDescriptorKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowOwnsGateDescriptorState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessTablePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowOwnsGateDescriptorKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateConstructionStepPredicateState<
+    Kind,
+> {
+    satisfied: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind>
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateConstructionStepPredicateState<
+        Kind,
+    >
+{
+    const fn from_satisfied(satisfied: bool) -> Self {
+        Self {
+            satisfied,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn satisfied(self) -> bool {
+        self.satisfied
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateBuiltFromReadinessRowKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateBuiltFromReadinessRowState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateConstructionStepPredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateBuiltFromReadinessRowKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateBuiltFromReadinessCursorStepKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateBuiltFromReadinessCursorStepState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateConstructionStepPredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateBuiltFromReadinessCursorStepKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStepUsageKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStepUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateConstructionStepPredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStepUsageKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateCursorPassesReadinessRowKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateCursorPassesReadinessRowState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateConstructionStepPredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateCursorPassesReadinessRowKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStepUsageKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStepUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateConstructionStepPredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStepUsageKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCountTableSourceState {
+    from_tables: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCountTableSourceState {
+    const fn from_tables(from_tables: bool) -> Self {
+        Self { from_tables }
+    }
+
+    fn sourced_from_tables(self) -> bool {
+        self.from_tables
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyPlanSourceState<Kind> {
+    from_run_body_plan: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyPlanSourceState<Kind> {
+    const fn from_run_body_plan(from_run_body_plan: bool) -> Self {
+        Self {
+            from_run_body_plan,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn sourced_from_run_body_plan(self) -> bool {
+        self.from_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopBeginPhaseCountRunBodyPlanSourceKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopBeginPhaseCountRunBodyPlanSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyPlanSourceState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopBeginPhaseCountRunBodyPlanSourceKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointPhaseCountRunBodyPlanSourceKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointPhaseCountRunBodyPlanSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyPlanSourceState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointPhaseCountRunBodyPlanSourceKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionCountRunBodyPlanSourceKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionCountRunBodyPlanSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyPlanSourceState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionCountRunBodyPlanSourceKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionPredicateState<Kind> {
+    satisfied: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionPredicateState<Kind> {
+    const fn from_satisfied(satisfied: bool) -> Self {
+        Self {
+            satisfied,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn satisfied(self) -> bool {
+        self.satisfied
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionGuardKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionGuardState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionPredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionGuardKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllPhaseRowsKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllPhaseRowsState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionPredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllPhaseRowsKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllGateRowsKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllGateRowsState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionPredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllGateRowsKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllCheckpointGateReadinessRowsKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllCheckpointGateReadinessRowsState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionPredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllCheckpointGateReadinessRowsKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopStepCursorReachedStepCountKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopStepCursorReachedStepCountState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionPredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopStepCursorReachedStepCountKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyCountReachedStepCountKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyCountReachedStepCountState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionPredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyCountReachedStepCountKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePredicateState<Kind> {
+    satisfied: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePredicateState<Kind> {
+    const fn from_satisfied(satisfied: bool) -> Self {
+        Self {
+            satisfied,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn satisfied(self) -> bool {
+        self.satisfied
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDriverUsageKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDriverUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDriverUsageKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorUsageKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorUsageKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateConstructionTableDrivenKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateConstructionTableDrivenState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateConstructionTableDrivenKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExplicitCheckpointGateBuilderLiteralsRemovedKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExplicitCheckpointGateBuilderLiteralsRemovedState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExplicitCheckpointGateBuilderLiteralsRemovedKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedMatchingGateDescriptorKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedMatchingGateDescriptorState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedMatchingGateDescriptorKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateDescriptorBoundToPhaseTableKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateDescriptorBoundToPhaseTableState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateDescriptorBoundToPhaseTableKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDescriptorUsageKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDescriptorUsageState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDescriptorUsageKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateControlsCheckpointInvocationKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateControlsCheckpointInvocationState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateControlsCheckpointInvocationKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainFlagState<Kind>
+{
+    enabled: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind>
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainFlagState<Kind>
+{
+    const fn from_enabled(enabled: bool) -> Self {
+        Self {
+            enabled,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn enabled(self) -> bool {
+        self.enabled
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainDecisionKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainDecisionState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainFlagState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainDecisionKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainResultKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainResultState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainFlagState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainResultKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowControlState<Kind> {
+    controls: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowControlState<Kind> {
+    const fn from_controls(controls: bool) -> Self {
+        Self {
+            controls,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn controls(self) -> bool {
+        self.controls
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowBridgeRunContextControlKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowBridgeRunContextControlState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowControlState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowBridgeRunContextControlKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCheckpointInvocationControlKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCheckpointInvocationControlState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowControlState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCheckpointInvocationControlKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanReadyFlagState<Kind> {
+    ready: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanReadyFlagState<Kind> {
+    const fn from_ready(ready: bool) -> Self {
+        Self {
+            ready,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn ready(self) -> bool {
+        self.ready
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanStageReadyKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanStageReadyState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanReadyFlagState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanStageReadyKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanRankCount<Kind> {
+    count: usize,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanRankCount<Kind> {
+    const fn from_count(count: usize) -> Self {
+        Self {
+            count,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn count(self) -> usize {
+        self.count
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateOutputRankCountKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateOutputRankCount =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanRankCount<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateOutputRankCountKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateExpectedRankCountKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateExpectedRankCount =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanRankCount<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateExpectedRankCountKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointDrainFlagState<Kind> {
+    enabled: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointDrainFlagState<Kind> {
+    const fn from_enabled(enabled: bool) -> Self {
+        Self {
+            enabled,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn enabled(self) -> bool {
+        self.enabled
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointDrainBeforeCheckpointKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointDrainBeforeCheckpointState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointDrainFlagState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointDrainBeforeCheckpointKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReadyState<Kind> {
+    ready: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReadyState<Kind> {
+    const fn from_ready(ready: bool) -> Self {
+        Self {
+            ready,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn ready(self) -> bool {
+        self.ready
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopQkvPlanReadyKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopQkvPlanReadyState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReadyState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopQkvPlanReadyKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopQkNormRopePlanReadyKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopQkNormRopePlanReadyState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReadyState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopQkNormRopePlanReadyKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTpOProjPeerPlanReadyKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTpOProjPeerPlanReadyState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReadyState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTpOProjPeerPlanReadyKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPostAttnNormPreparePlanReadyKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPostAttnNormPreparePlanReadyState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReadyState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPostAttnNormPreparePlanReadyKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEntryCount {
+    Idle,
+    SingleRunEntry,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEntryCount {
+    fn count(self) -> usize {
+        match self {
+            Self::Idle => 0,
+            Self::SingleRunEntry => 1,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEntryPredicateState<Kind> {
+    satisfied: bool,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind>
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEntryPredicateState<Kind>
+{
+    const fn from_satisfied(satisfied: bool) -> Self {
+        Self {
+            satisfied,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn satisfied(self) -> bool {
+        self.satisfied
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorSingleRunEntryKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorSingleRunEntryState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEntryPredicateState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorSingleRunEntryKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEntryCountState<Kind> {
+    entry_count: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEntryCount,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEntryCountState<Kind> {
+    const fn from_entry_count(
+        entry_count: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEntryCount,
+    ) -> Self {
+        Self {
+            entry_count,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn count(self) -> usize {
+        self.entry_count.count()
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeEntryCountKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeEntryCountState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEntryCountState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeEntryCountKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorMainEntryCallsiteCountKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorMainEntryCallsiteCountState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEntryCountState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorMainEntryCallsiteCountKind,
+    >;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount {
+    count: usize,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount {
+    const fn from_count(count: usize) -> Self {
+        Self { count }
+    }
+
+    fn count(self) -> usize {
+        self.count
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCount {
+    count: usize,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCount {
+    const fn from_count(count: usize) -> Self {
+        Self { count }
+    }
+
+    fn count(self) -> usize {
+        self.count
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepCount {
+    count: usize,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepCount {
+    const fn from_count(count: usize) -> Self {
+        Self { count }
+    }
+
+    fn count(self) -> usize {
+        self.count
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseRowCount {
+    count: usize,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseRowCount {
+    const fn from_count(count: usize) -> Self {
+        Self { count }
+    }
+
+    fn count(self) -> usize {
+        self.count
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCount {
+    count: usize,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCount {
+    const fn from_count(count: usize) -> Self {
+        Self { count }
+    }
+
+    fn count(self) -> usize {
+        self.count
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRemainingInterleavedCheckpointCount {
+    count: usize,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRemainingInterleavedCheckpointCount {
+    const fn from_count(count: usize) -> Self {
+        Self { count }
+    }
+
+    fn count(self) -> usize {
+        self.count
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+    index: usize,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+    const fn from_index(index: usize) -> Self {
+        Self { index }
+    }
+
+    fn index(self) -> usize {
+        self.index
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPlanPhase2PreCheckpointPreparePhaseIndexState
+{
+    phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPlanPhase2PreCheckpointPreparePhaseIndexState {
+    const fn from_phase_index(
+        phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    ) -> Self {
+        Self { phase_index }
+    }
+
+    fn phase_index_state(self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+        self.phase_index
+    }
+}
+
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_PLAN_PHASE2_PRE_CHECKPOINT_PREPARE_PHASE_INDEX:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPlanPhase2PreCheckpointPreparePhaseIndexState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPlanPhase2PreCheckpointPreparePhaseIndexState::from_phase_index(
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor::from_index(
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_THIRD_PHASE_INDEX,
+        ),
+    );
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateIndex {
+    index: usize,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateIndex {
+    const fn from_index(index: usize) -> Self {
+        Self { index }
+    }
+
+    fn index(self) -> usize {
+        self.index
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor {
+    index: usize,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor {
+    const fn from_index(index: usize) -> Self {
+        Self { index }
+    }
+
+    fn index(self) -> usize {
+        self.index
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount {
+    count: usize,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount {
+    const fn from_count(count: usize) -> Self {
+        Self { count }
+    }
+
+    fn count(self) -> usize {
+        self.count
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor {
+    index: usize,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor {
+    const fn from_index(index: usize) -> Self {
+        Self { index }
+    }
+
+    fn advanced_by(self, step: usize) -> Self {
+        Self::from_index(self.index + step)
+    }
+
+    fn index(self) -> usize {
+        self.index
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSource {
+    Idle,
+    Begin,
+    CheckpointGateReady,
+}
+
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_IDLE_CHECKPOINT_INVOCATION_SOURCE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSource =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSource::Idle;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_BEGIN_CHECKPOINT_INVOCATION_SOURCE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSource =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSource::Begin;
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_GATE_READY_CHECKPOINT_INVOCATION_SOURCE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSource =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSource::CheckpointGateReady;
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSource {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Idle => {
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_SOURCE_IDLE
+            }
+            Self::Begin => {
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_SOURCE_BEGIN
+            }
+            Self::CheckpointGateReady => {
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_SOURCE_CHECKPOINT_GATE_READY
+            }
+        }
+    }
+
+    fn inside_begin_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginCheckpointInvocationSourceState
+    {
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginCheckpointInvocationSourceState::from_inside_source(
+            self
+                == QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_BEGIN_CHECKPOINT_INVOCATION_SOURCE,
+        )
+    }
+
+    fn inside_checkpoint_gate_ready_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorGateReadyCheckpointInvocationSourceState
+    {
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorGateReadyCheckpointInvocationSourceState::from_inside_source(
+            self
+                == QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_GATE_READY_CHECKPOINT_INVOCATION_SOURCE,
+        )
+    }
+
+    fn owned_by_phase_executor_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationOwnershipState
+    {
+        let inside_begin_state = self.inside_begin_state();
+        let inside_checkpoint_gate_ready_state = self.inside_checkpoint_gate_ready_state();
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationOwnershipState::from_owned(
+            inside_begin_state.inside_source()
+                || inside_checkpoint_gate_ready_state.inside_source(),
+        )
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSourceState<
+    Kind,
+> {
+    source:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSource,
+    _kind: std::marker::PhantomData<Kind>,
+}
+
+impl<Kind>
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSourceState<
+        Kind,
+    >
+{
+    const fn from_source(
+        source: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSource,
+    ) -> Self {
+        Self {
+            source,
+            _kind: std::marker::PhantomData,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        self.source.label()
+    }
+
+    fn inside_begin_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginCheckpointInvocationSourceState
+    {
+        self.source.inside_begin_state()
+    }
+
+    fn inside_checkpoint_gate_ready_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorGateReadyCheckpointInvocationSourceState
+    {
+        self.source.inside_checkpoint_gate_ready_state()
+    }
+
+    fn owned_by_phase_executor_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationOwnershipState
+    {
+        self.source.owned_by_phase_executor_state()
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSourceState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceKind,
+    >;
+
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_RUNTIME_IDLE_CHECKPOINT_INVOCATION_SOURCE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceState::from_source(
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_IDLE_CHECKPOINT_INVOCATION_SOURCE,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_RUNTIME_BEGIN_CHECKPOINT_INVOCATION_SOURCE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceState::from_source(
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_BEGIN_CHECKPOINT_INVOCATION_SOURCE,
+    );
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_RUNTIME_GATE_READY_CHECKPOINT_INVOCATION_SOURCE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceState::from_source(
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_GATE_READY_CHECKPOINT_INVOCATION_SOURCE,
+    );
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPlanCheckpointInvocationSourceKind;
+
+type QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPlanCheckpointInvocationSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationSourceState<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPlanCheckpointInvocationSourceKind,
+    >;
+
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_PLAN_GATE_READY_CHECKPOINT_INVOCATION_SOURCE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPlanCheckpointInvocationSourceState =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPlanCheckpointInvocationSourceState::from_source(
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_GATE_READY_CHECKPOINT_INVOCATION_SOURCE,
+    );
+
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorState {
+    active:
+        std::cell::Cell<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeActiveState>,
+    entry_count:
+        std::cell::Cell<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeEntryCountState>,
+    checkpoint_invocation_source:
+        std::cell::Cell<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceState>,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorState {
+    fn new() -> Self {
+        Self {
+            active: std::cell::Cell::new(
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_INITIAL_ACTIVE,
+            ),
+            entry_count: std::cell::Cell::new(
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_IDLE_ENTRY_COUNT,
+            ),
+            checkpoint_invocation_source: std::cell::Cell::new(
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_RUNTIME_IDLE_CHECKPOINT_INVOCATION_SOURCE,
+            ),
+        }
+    }
+
+    fn active_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeActiveState {
+        self.active.get()
+    }
+
+    fn entry_count_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeEntryCountState
+    {
+        self.entry_count.get()
+    }
+
+    fn set_active(
+        &self,
+        active: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeActiveState,
+    ) {
+        self.active.set(active);
+    }
+
+    fn set_entry_count(
+        &self,
+        entry_count:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeEntryCountState,
+    ) {
+        self.entry_count.set(entry_count);
+    }
+
+    fn checkpoint_invocation_source(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceState
+    {
+        self.checkpoint_invocation_source.get()
+    }
+
+    fn set_checkpoint_invocation_source(
+        &self,
+        source:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceState,
+    ) {
+        self.checkpoint_invocation_source.set(source);
+    }
+
+    fn reset_checkpoint_invocation_source(&self) {
+        self.set_checkpoint_invocation_source(
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_RUNTIME_IDLE_CHECKPOINT_INVOCATION_SOURCE,
+        );
+    }
+}
+
+struct QwenResidentLayerRunnerDenseApplySequenceLoopControllerState {
+    step_count: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepCount,
+    cursor: std::cell::Cell<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor>,
+    ready_step_count: std::cell::Cell<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount,
+    >,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceLoopControllerState {
+    fn new(
+        step_count: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepCount,
+    ) -> Self {
+        Self {
+            step_count,
+            cursor: std::cell::Cell::new(
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_INITIAL_CURSOR,
+            ),
+            ready_step_count: std::cell::Cell::new(
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_INITIAL_READY_STEP_COUNT,
+            ),
+        }
+    }
+
+    fn step_count_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepCount {
+        self.step_count
+    }
+
+    fn cursor_state(&self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor {
+        self.cursor.get()
+    }
+
+    fn ready_step_count_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount {
+        self.ready_step_count.get()
+    }
+
+    fn set_ready_step_count(
+        &self,
+        ready_step_count: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount,
+    ) {
+        self.ready_step_count.set(ready_step_count);
+    }
+
+    fn advance_cursor_to(
+        &self,
+        cursor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor,
+    ) {
+        self.cursor.set(cursor);
+    }
+}
+
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainState {
+    cursor_at_begin:
+        std::cell::Cell<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor>,
+    drained_step_count: std::cell::Cell<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCount,
+    >,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainState {
+    fn new() -> Self {
+        Self {
+            cursor_at_begin: std::cell::Cell::new(
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_READY_DRAIN_INITIAL_CURSOR_AT_BEGIN,
+            ),
+            drained_step_count: std::cell::Cell::new(
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_READY_DRAIN_INITIAL_DRAINED_STEP_COUNT,
+            ),
+        }
+    }
+
+    fn cursor_at_begin_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor {
+        self.cursor_at_begin.get()
+    }
+
+    fn drained_step_count_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCount {
+        self.drained_step_count.get()
+    }
+
+    fn reset_for_cursor(
+        &self,
+        cursor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor,
+    ) {
+        self.cursor_at_begin.set(cursor);
+        self.drained_step_count.set(
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_READY_DRAIN_RESET_DRAINED_STEP_COUNT,
+        );
+    }
+
+    fn advance_drained_step_count_to(
+        &self,
+        drained_step_count:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCount,
+    ) {
+        self.drained_step_count.set(drained_step_count);
+    }
+}
+
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCursorState {
+    phase_index: std::cell::Cell<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor>,
+    checkpoint_gate_readiness_cursor: std::cell::Cell<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor,
+    >,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCursorState {
+    fn new() -> Self {
+        Self {
+            phase_index: std::cell::Cell::new(
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_INITIAL_PHASE_INDEX,
+            ),
+            checkpoint_gate_readiness_cursor: std::cell::Cell::new(
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_INITIAL_CHECKPOINT_READINESS_CURSOR,
+            ),
+        }
+    }
+
+    fn phase_index_state(&self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+        self.phase_index.get()
+    }
+
+    fn advance_phase_index_to(
+        &self,
+        phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    ) {
+        self.phase_index.set(phase_index);
+    }
+
+    fn advance_phase_index_from_advance_state(
+        &self,
+        bridge_loop_phase_cursor_advance_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursorAdvanceState,
+    ) {
+        self.advance_phase_index_to(
+            bridge_loop_phase_cursor_advance_state.bridge_loop_phase_cursor_after_advance(),
+        );
+    }
+
+    fn checkpoint_gate_readiness_cursor_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor {
+        self.checkpoint_gate_readiness_cursor.get()
+    }
+
+    fn advance_checkpoint_gate_readiness_cursor_to(
+        &self,
+        cursor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor,
+    ) {
+        self.checkpoint_gate_readiness_cursor.set(cursor);
+    }
+
+    fn advance_checkpoint_gate_readiness_cursor_from_advance_state(
+        &self,
+        bridge_checkpoint_gate_readiness_cursor_advance_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorAdvanceState,
+    ) {
+        self.advance_checkpoint_gate_readiness_cursor_to(
+            bridge_checkpoint_gate_readiness_cursor_advance_state
+                .bridge_checkpoint_gate_readiness_cursor_after_advance(),
+        );
+    }
+}
+
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRuntimeState {
+    controller_state: QwenResidentLayerRunnerDenseApplySequenceLoopControllerState,
+    controller_ready_drain_state:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainState,
+    cursor_state: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCursorState,
+    phase_executor_state: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRuntimeState {
+    fn new(controller_step_count: usize) -> Self {
+        Self {
+            controller_state: QwenResidentLayerRunnerDenseApplySequenceLoopControllerState::new(
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepCount::from_count(
+                    controller_step_count,
+                ),
+            ),
+            controller_ready_drain_state:
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainState::new(),
+            cursor_state: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCursorState::new(),
+            phase_executor_state:
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorState::new(),
+        }
+    }
+
+    fn from_table_view(
+        tables: &QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTableView<'_>,
+    ) -> Self {
+        let controller_step_count_state = tables.phase_count_state();
+        Self::new(controller_step_count_state.count())
+    }
+
+    fn controller_state(&self) -> &QwenResidentLayerRunnerDenseApplySequenceLoopControllerState {
+        &self.controller_state
+    }
+
+    fn controller_ready_drain_state(
+        &self,
+    ) -> &QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainState {
+        &self.controller_ready_drain_state
+    }
+
+    fn cursor_state(&self) -> &QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCursorState {
+        &self.cursor_state
+    }
+
+    fn phase_executor_state(
+        &self,
+    ) -> &QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorState {
+        &self.phase_executor_state
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDenseDispatchOrdinal {
+    First,
+    Second,
+    Third,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDenseDispatchOrdinal {
+    fn label(self) -> &'static str {
+        match self {
+            Self::First => "first",
+            Self::Second => "second",
+            Self::Third => "third",
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole {
+    MlpResidualNormToLayerBridgeEntry {
+        source_layer_index: usize,
+        target_layer_index: usize,
+    },
+    DenseDispatchAfterLayerToLayerGate {
+        ordinal: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDenseDispatchOrdinal,
+        source_layer_index: usize,
+        target_layer_index: usize,
+    },
+}
+
+impl std::fmt::Display for QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MlpResidualNormToLayerBridgeEntry {
+                source_layer_index,
+                target_layer_index,
+            } => write!(
+                formatter,
+                "layer{source_layer_index}_mlp_residual_norm_to_layer{target_layer_index}_bridge_entry"
+            ),
+            Self::DenseDispatchAfterLayerToLayerGate {
+                ordinal,
+                source_layer_index,
+                target_layer_index,
+            } => write!(
+                formatter,
+                "{}_dense_dispatch_after_layer{source_layer_index}_to_layer{target_layer_index}_gate",
+                ordinal.label()
+            ),
+        }
+    }
+}
+
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_ENTRY_ROLE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole::MlpResidualNormToLayerBridgeEntry {
+        source_layer_index: 18,
+        target_layer_index: 19,
+    };
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_FIRST_DENSE_DISPATCH_GATE_ROLE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole::DenseDispatchAfterLayerToLayerGate {
+        ordinal: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDenseDispatchOrdinal::First,
+        source_layer_index: 18,
+        target_layer_index: 19,
+    };
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SECOND_DENSE_DISPATCH_GATE_ROLE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole::DenseDispatchAfterLayerToLayerGate {
+        ordinal: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDenseDispatchOrdinal::Second,
+        source_layer_index: 19,
+        target_layer_index: 20,
+    };
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_THIRD_DENSE_DISPATCH_GATE_ROLE:
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole =
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole::DenseDispatchAfterLayerToLayerGate {
+        ordinal: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDenseDispatchOrdinal::Third,
+        source_layer_index: 20,
+        target_layer_index: 21,
+    };
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate {
+    gate_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateIndex,
+    phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    gate_role: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole,
+    phase_role: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole,
+    controls_bridge_run_context:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowBridgeRunContextControlState,
+    controls_checkpoint_invocation:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCheckpointInvocationControlState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate {
+    const fn new(
+        gate_index: usize,
+        phase_index: usize,
+        gate_role: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole,
+        phase_role: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole,
+        controls_bridge_run_context:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowBridgeRunContextControlState,
+        controls_checkpoint_invocation:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCheckpointInvocationControlState,
+    ) -> Self {
+        Self {
+            gate_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateIndex::from_index(
+                gate_index,
+            ),
+            phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor::from_index(
+                phase_index,
+            ),
+            gate_role,
+            phase_role,
+            controls_bridge_run_context,
+            controls_checkpoint_invocation,
+        }
+    }
+
+    fn gate_index(self) -> usize {
+        self.gate_index.index()
+    }
+
+    fn phase_index(self) -> usize {
+        self.phase_index.index()
+    }
+
+    fn controls_bridge_run_context_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowBridgeRunContextControlState
+    {
+        self.controls_bridge_run_context
+    }
+
+    fn controls_checkpoint_invocation_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCheckpointInvocationControlState
+    {
+        self.controls_checkpoint_invocation
+    }
+}
+
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATES:
+    [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate;
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_ROW_COUNT] = [
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate::new(
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_INDEX,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_FIRST_PHASE_INDEX,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_ENTRY_ROLE,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_FIRST_DENSE_DISPATCH_GATE_ROLE,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_ROW_CONTROLS_BRIDGE_CONTEXT,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_ROW_CONTROLS_CHECKPOINT_INVOCATION,
+    ),
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate::new(
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_FIRST_CHECKPOINT_GATE_INDEX,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SECOND_PHASE_INDEX,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SECOND_DENSE_DISPATCH_GATE_ROLE,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SECOND_DENSE_DISPATCH_GATE_ROLE,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_CONTROLS_BRIDGE_CONTEXT,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_CONTROLS_CHECKPOINT_INVOCATION,
+    ),
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate::new(
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SECOND_CHECKPOINT_GATE_INDEX,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_THIRD_PHASE_INDEX,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_THIRD_DENSE_DISPATCH_GATE_ROLE,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_THIRD_DENSE_DISPATCH_GATE_ROLE,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_CONTROLS_BRIDGE_CONTEXT,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_CONTROLS_CHECKPOINT_INVOCATION,
+    ),
+];
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase {
+    phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    ready_step_count_after_phase:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount,
+    bridge_role: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase {
+    const fn new(
+        phase_index: usize,
+        ready_step_count_after_phase: usize,
+        bridge_role: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRole,
+    ) -> Self {
+        Self {
+            phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor::from_index(
+                phase_index,
+            ),
+            ready_step_count_after_phase:
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount::from_count(
+                    ready_step_count_after_phase,
+                ),
+            bridge_role,
+        }
+    }
+
+    fn phase_index(self) -> usize {
+        self.phase_index.index()
+    }
+
+    fn ready_step_count_after_phase(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount {
+        self.ready_step_count_after_phase
+    }
+}
+
+const QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASES:
+    [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase;
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_ROW_COUNT] = [
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase::new(
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_FIRST_PHASE_INDEX,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_FIRST_PHASE_READY_STEP_COUNT,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_FIRST_DENSE_DISPATCH_GATE_ROLE,
+    ),
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase::new(
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SECOND_PHASE_INDEX,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SECOND_PHASE_READY_STEP_COUNT,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SECOND_DENSE_DISPATCH_GATE_ROLE,
+    ),
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase::new(
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_THIRD_PHASE_INDEX,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_THIRD_PHASE_READY_STEP_COUNT,
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_THIRD_DENSE_DISPATCH_GATE_ROLE,
+    ),
+];
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanReady {
+    stage_ready: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanStageReadyState,
+    output_rank_count: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateOutputRankCount,
+    expected_rank_count:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateExpectedRankCount,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanReady {
+    fn new(
+        stage_ready: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanStageReadyState,
+        output_rank_count:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateOutputRankCount,
+        expected_rank_count:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateExpectedRankCount,
+    ) -> Self {
+        Self {
+            stage_ready,
+            output_rank_count,
+            expected_rank_count,
+        }
+    }
+
+    fn stage_ready_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanStageReadyState {
+        self.stage_ready
+    }
+
+    fn output_rank_count_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateOutputRankCount {
+        self.output_rank_count
+    }
+
+    fn expected_rank_count_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateExpectedRankCount {
+        self.expected_rank_count
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGate {
+    gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+    run_gate_plan_ready: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanReady,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGate {
+    fn new(
+        gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+        run_gate_plan_ready: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanReady,
+    ) -> Self {
+        Self {
+            gate_descriptor,
+            run_gate_plan_ready,
+        }
+    }
+
+    fn run_gate_plan_ready(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanReady {
+        self.run_gate_plan_ready
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpoint {
+    bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpoint {
+    fn new(
+        bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+        bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+    ) -> Self {
+        Self {
+            bridge_loop_phase_index,
+            bridge_loop_phase,
+        }
+    }
+
+    fn bridge_loop_phase_index_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+        self.bridge_loop_phase_index
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate {
+    gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+    checkpoint_gate_plan_ready:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate {
+    fn new(
+        gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+        checkpoint_gate_plan_ready:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady,
+    ) -> Self {
+        Self {
+            gate_descriptor,
+            checkpoint_gate_plan_ready,
+        }
+    }
+
+    fn checkpoint_gate_plan_ready(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady {
+        self.checkpoint_gate_plan_ready
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStep {
+    checkpoint_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate,
+    checkpoint_gate_ready:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStep {
+    fn new(
+        checkpoint_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate,
+        checkpoint_gate_ready:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState,
+    ) -> Self {
+        Self {
+            checkpoint_gate,
+            checkpoint_gate_ready,
+        }
+    }
+
+    fn checkpoint_gate_ready_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState {
+        self.checkpoint_gate_ready
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState {
+    ready: bool,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState {
+    fn from_ready(ready: bool) -> Self {
+        Self { ready }
+    }
+
+    fn ready(self) -> bool {
+        self.ready
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReady {
+    bridge_checkpoint_gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+    bridge_checkpoint_gate_ready:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReady {
+    fn new(
+        bridge_checkpoint_gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+        bridge_checkpoint_gate_ready:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate_descriptor,
+            bridge_checkpoint_gate_ready,
+        }
+    }
+
+    fn bridge_checkpoint_gate_ready_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState {
+        self.bridge_checkpoint_gate_ready
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady {
+    qkv_plan_ready: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopQkvPlanReadyState,
+    qk_norm_rope_plan_ready:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopQkNormRopePlanReadyState,
+    tp_o_proj_peer_plan_ready:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTpOProjPeerPlanReadyState,
+    post_attn_norm_prepare_plan_ready:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPostAttnNormPreparePlanReadyState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady {
+    fn new(
+        qkv_plan_ready: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopQkvPlanReadyState,
+        qk_norm_rope_plan_ready:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopQkNormRopePlanReadyState,
+        tp_o_proj_peer_plan_ready:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTpOProjPeerPlanReadyState,
+        post_attn_norm_prepare_plan_ready:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPostAttnNormPreparePlanReadyState,
+    ) -> Self {
+        Self {
+            qkv_plan_ready,
+            qk_norm_rope_plan_ready,
+            tp_o_proj_peer_plan_ready,
+            post_attn_norm_prepare_plan_ready,
+        }
+    }
+
+    fn from_flags(checkpoint_gate_plan_ready_flags: (bool, bool, bool, bool)) -> Self {
+        let (
+            qkv_plan_ready,
+            qk_norm_rope_plan_ready,
+            tp_o_proj_peer_plan_ready,
+            post_attn_norm_prepare_plan_ready,
+        ) = checkpoint_gate_plan_ready_flags;
+        Self::new(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopQkvPlanReadyState::from_ready(
+                qkv_plan_ready,
+            ),
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopQkNormRopePlanReadyState::from_ready(
+                qk_norm_rope_plan_ready,
+            ),
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTpOProjPeerPlanReadyState::from_ready(
+                tp_o_proj_peer_plan_ready,
+            ),
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPostAttnNormPreparePlanReadyState::from_ready(
+                post_attn_norm_prepare_plan_ready,
+            ),
+        )
+    }
+
+    fn qkv_plan_ready_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopQkvPlanReadyState {
+        self.qkv_plan_ready
+    }
+
+    fn qk_norm_rope_plan_ready_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopQkNormRopePlanReadyState {
+        self.qk_norm_rope_plan_ready
+    }
+
+    fn tp_o_proj_peer_plan_ready_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTpOProjPeerPlanReadyState {
+        self.tp_o_proj_peer_plan_ready
+    }
+
+    fn post_attn_norm_prepare_plan_ready_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPostAttnNormPreparePlanReadyState {
+        self.post_attn_norm_prepare_plan_ready
+    }
+
+    fn checkpoint_gate_ready_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState {
+        let qkv_plan_ready_state = self.qkv_plan_ready_state();
+        let qk_norm_rope_plan_ready_state = self.qk_norm_rope_plan_ready_state();
+        let tp_o_proj_peer_plan_ready_state = self.tp_o_proj_peer_plan_ready_state();
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState::from_ready(
+            qkv_plan_ready_state.ready()
+                && qk_norm_rope_plan_ready_state.ready()
+                && tp_o_proj_peer_plan_ready_state.ready(),
+        )
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReadyRows {
+    rows: [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady;
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT],
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReadyRows {
+    fn new(
+        rows: [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady;
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT],
+    ) -> Self {
+        Self { rows }
+    }
+
+    fn from_flags(
+        checkpoint_gate_plan_ready_rows: [(bool, bool, bool, bool);
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT],
+    ) -> Self {
+        let [checkpoint_gate0_plan_ready_flags, checkpoint_gate1_plan_ready_flags] =
+            checkpoint_gate_plan_ready_rows;
+        Self::new([
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady::from_flags(
+                checkpoint_gate0_plan_ready_flags,
+            ),
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady::from_flags(
+                checkpoint_gate1_plan_ready_flags,
+            ),
+        ])
+    }
+
+    fn into_rows(
+        self,
+    ) -> [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady;
+    QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT]{
+        self.rows
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPlanReady {
+    run_gate_plan_ready: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanReady,
+    checkpoint_gate_plan_ready_rows:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReadyRows,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPlanReady {
+    fn new(
+        run_gate_plan_ready: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanReady,
+        checkpoint_gate_plan_ready_rows:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReadyRows,
+    ) -> Self {
+        Self {
+            run_gate_plan_ready,
+            checkpoint_gate_plan_ready_rows,
+        }
+    }
+
+    fn from_flags(
+        run_gate_stage_ready: bool,
+        run_gate_output_rank_count: usize,
+        run_gate_expected_rank_count: usize,
+        checkpoint_gate_plan_ready_rows: [(bool, bool, bool, bool);
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT],
+    ) -> Self {
+        Self::new(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanReady::new(
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanStageReadyState::from_ready(
+                    run_gate_stage_ready,
+                ),
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateOutputRankCount::from_count(
+                    run_gate_output_rank_count,
+                ),
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateExpectedRankCount::from_count(
+                    run_gate_expected_rank_count,
+                ),
+            ),
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReadyRows::from_flags(
+                checkpoint_gate_plan_ready_rows,
+            ),
+        )
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness {
+    gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+    checkpoint_gate_plan_ready:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness {
+    fn new(
+        gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+        checkpoint_gate_plan_ready:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady,
+    ) -> Self {
+        Self {
+            gate_descriptor,
+            checkpoint_gate_plan_ready,
+        }
+    }
+
+    fn checkpoint_gate_plan_ready(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady {
+        self.checkpoint_gate_plan_ready
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStep {
+    checkpoint_gate_readiness_cursor:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor,
+    checkpoint_gate_readiness_row_count:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount,
+    checkpoint_gate_readiness:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStep {
+    fn new(
+        checkpoint_gate_readiness_cursor:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor,
+        checkpoint_gate_readiness_row_count:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount,
+        checkpoint_gate_readiness:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness,
+    ) -> Self {
+        Self {
+            checkpoint_gate_readiness_cursor,
+            checkpoint_gate_readiness_row_count,
+            checkpoint_gate_readiness,
+        }
+    }
+
+    fn checkpoint_gate_readiness_cursor_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor {
+        self.checkpoint_gate_readiness_cursor
+    }
+
+    fn checkpoint_gate_readiness_row_count_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount {
+        self.checkpoint_gate_readiness_row_count
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTableView<'a> {
+    gates: &'a [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate],
+    phases: &'a [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase],
+    checkpoint_gate_readiness_rows:
+        [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness;
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT],
+}
+
+impl<'a> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTableView<'a> {
+    fn new(
+        gates: &'a [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate],
+        phases: &'a [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase],
+        checkpoint_gate_readiness_rows:
+            [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness;
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT],
+    ) -> Self {
+        Self {
+            gates,
+            phases,
+            checkpoint_gate_readiness_rows,
+        }
+    }
+
+    fn from_static_bridge_tables(
+        checkpoint_gate_readiness_rows:
+            [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness;
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT],
+    ) -> Self {
+        Self::new(
+            &QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATES,
+            &QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASES,
+            checkpoint_gate_readiness_rows,
+        )
+    }
+
+    fn gate_count_state(&self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCount {
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCount::from_count(
+            self.gates.len(),
+        )
+    }
+
+    fn phase_count_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseRowCount {
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseRowCount::from_count(
+            self.phases.len(),
+        )
+    }
+
+    fn checkpoint_gate_readiness_row_count_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount {
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount::from_count(
+            self.checkpoint_gate_readiness_rows.len(),
+        )
+    }
+
+    fn gates(&self) -> &'a [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate] {
+        self.gates
+    }
+
+    fn phases(&self) -> &'a [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase] {
+        self.phases
+    }
+
+    fn checkpoint_gate_readiness_rows(
+        &self,
+    ) -> &[QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness] {
+        &self.checkpoint_gate_readiness_rows
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState {
+    run_body_plan: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyPlan,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState {
+    const fn from_run_body_plan(
+        run_body_plan: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyPlan,
+    ) -> Self {
+        Self { run_body_plan }
+    }
+
+    fn run_body_plan(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyPlan {
+        self.run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCursorState {
+    cursor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCursorState {
+    const fn from_cursor(
+        cursor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor,
+    ) -> Self {
+        Self { cursor }
+    }
+
+    fn cursor(self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor {
+        self.cursor
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStep {
+    sequence_loop_controller_step_cursor:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCursorState,
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStep {
+    fn new(
+        sequence_loop_controller_step_cursor:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCursorState,
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            sequence_loop_controller_step_cursor,
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn sequence_loop_controller_step_cursor(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCursorState
+    {
+        self.sequence_loop_controller_step_cursor
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainNextStepState {
+    controller_ready_drain_step:
+        Option<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStep>,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainNextStepState {
+    const fn from_step_option(
+        controller_ready_drain_step: Option<
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStep,
+        >,
+    ) -> Self {
+        Self {
+            controller_ready_drain_step,
+        }
+    }
+
+    fn controller_ready_drain_step(
+        self,
+    ) -> Option<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStep> {
+        self.controller_ready_drain_step
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepConstructionState
+{
+    sequence_loop_controller_step_cursor:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCursorState,
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepConstructionState {
+    const fn from_parts(
+        sequence_loop_controller_step_cursor:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCursorState,
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            sequence_loop_controller_step_cursor,
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn sequence_loop_controller_step_cursor_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCursorState
+    {
+        self.sequence_loop_controller_step_cursor
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchNextStepState
+{
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchNextStepState {
+    fn from_step(
+        controller_ready_drain_step:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStep,
+    ) -> Self {
+        Self {
+            bridge_phase_executor_run_body_plan: controller_ready_drain_step
+                .bridge_phase_executor_run_body_plan_state(),
+        }
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchCompleteStepState
+{
+    sequence_loop_controller_step_cursor:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCursorState,
+}
+
+impl
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchCompleteStepState
+{
+    fn from_step(
+        controller_ready_drain_step:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStep,
+    ) -> Self {
+        Self {
+            sequence_loop_controller_step_cursor: controller_ready_drain_step
+                .sequence_loop_controller_step_cursor(),
+        }
+    }
+
+    fn sequence_loop_controller_step_cursor_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCursorState
+    {
+        self.sequence_loop_controller_step_cursor
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchRunStepState {
+    controller_ready_drain_step:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStep,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchRunStepState {
+    const fn from_step(
+        controller_ready_drain_step:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStep,
+    ) -> Self {
+        Self {
+            controller_ready_drain_step,
+        }
+    }
+
+    fn controller_ready_drain_step(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStep {
+        self.controller_ready_drain_step
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorNextCheckpointReadyDrainStepsState
+{
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorNextCheckpointReadyDrainStepsState {
+    const fn from_run_body_plan_state(
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorNextCheckpointState {
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorNextCheckpointState {
+    const fn from_run_body_plan_state(
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorNextCheckpointStageState {
+    bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+    bridge_loop_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    bridge_loop_phase_cursor_after_advance_state:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    bridge_phase_executor_checkpoint_invocation_source:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceState,
+    bridge_phase_executor_run_entry_count_state:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeEntryCountState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorNextCheckpointStageState {
+    const fn from_parts_state(
+        bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+        bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+        bridge_loop_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+        bridge_loop_phase_cursor_after_advance_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+        bridge_phase_executor_checkpoint_invocation_source:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceState,
+        bridge_phase_executor_run_entry_count_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeEntryCountState,
+    ) -> Self {
+        Self {
+            bridge_loop_phase_index,
+            bridge_loop_phase,
+            bridge_loop_gate,
+            bridge_phase_executor_run_body_plan,
+            bridge_loop_phase_cursor_after_advance_state,
+            bridge_phase_executor_checkpoint_invocation_source,
+            bridge_phase_executor_run_entry_count_state,
+        }
+    }
+
+    fn bridge_loop_phase_index_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+        self.bridge_loop_phase_index
+    }
+
+    fn bridge_loop_phase(self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase {
+        self.bridge_loop_phase
+    }
+
+    fn bridge_loop_gate(self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate {
+        self.bridge_loop_gate
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+
+    fn bridge_loop_phase_cursor_after_advance_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+        self.bridge_loop_phase_cursor_after_advance_state
+    }
+
+    fn bridge_phase_executor_checkpoint_invocation_source(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeCheckpointInvocationSourceState
+    {
+        self.bridge_phase_executor_checkpoint_invocation_source
+    }
+
+    fn bridge_phase_executor_run_entry_count_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRuntimeEntryCountState
+    {
+        self.bridge_phase_executor_run_entry_count_state
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyCheckpointStageState {
+    bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+    bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    next_ready_step_count_state:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount,
+    sequence_loop_controller_step_count_state:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepCount,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyCheckpointStageState {
+    const fn from_parts_state(
+        bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+        bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+        next_ready_step_count_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount,
+        sequence_loop_controller_step_count_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepCount,
+    ) -> Self {
+        Self {
+            bridge_loop_phase,
+            bridge_loop_phase_index,
+            bridge_phase_executor_run_body_plan,
+            next_ready_step_count_state,
+            sequence_loop_controller_step_count_state,
+        }
+    }
+
+    fn bridge_loop_phase(self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase {
+        self.bridge_loop_phase
+    }
+
+    fn bridge_loop_phase_index_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+        self.bridge_loop_phase_index
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+
+    fn next_ready_step_count_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount {
+        self.next_ready_step_count_state
+    }
+
+    fn sequence_loop_controller_step_count_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepCount {
+        self.sequence_loop_controller_step_count_state
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStageState {
+    bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+    bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    sequence_loop_controller_step_cursor:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor,
+    sequence_loop_controller_ready_step_count_state:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount,
+    sequence_loop_controller_step_count_state:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepCount,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStageState {
+    const fn from_parts(
+        bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+        bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyPlan,
+        sequence_loop_controller_step_cursor:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor,
+        sequence_loop_controller_ready_step_count_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount,
+        sequence_loop_controller_step_count_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepCount,
+    ) -> Self {
+        Self {
+            bridge_loop_phase,
+            bridge_loop_phase_index,
+            bridge_phase_executor_run_body_plan:
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState::from_run_body_plan(
+                    bridge_phase_executor_run_body_plan,
+                ),
+            sequence_loop_controller_step_cursor,
+            sequence_loop_controller_ready_step_count_state,
+            sequence_loop_controller_step_count_state,
+        }
+    }
+
+    fn bridge_loop_phase(self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase {
+        self.bridge_loop_phase
+    }
+
+    fn bridge_loop_phase_index_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+        self.bridge_loop_phase_index
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+
+    fn sequence_loop_controller_step_cursor(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor {
+        self.sequence_loop_controller_step_cursor
+    }
+
+    fn sequence_loop_controller_ready_step_count_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyStepCount {
+        self.sequence_loop_controller_ready_step_count_state
+    }
+
+    fn sequence_loop_controller_step_count_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepCount {
+        self.sequence_loop_controller_step_count_state
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainBeginState {
+    bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+    bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainBeginState {
+    const fn from_parts(
+        bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+        bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_loop_phase,
+            bridge_loop_phase_index,
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_loop_phase(self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase {
+        self.bridge_loop_phase
+    }
+
+    fn bridge_loop_phase_index_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+        self.bridge_loop_phase_index
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainNextStepRequestState {
+    bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+    bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainNextStepRequestState {
+    const fn from_parts(
+        bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+        bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_loop_phase,
+            bridge_loop_phase_index,
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_loop_phase(self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase {
+        self.bridge_loop_phase
+    }
+
+    fn bridge_loop_phase_index_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+        self.bridge_loop_phase_index
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainCompleteState {
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainCompleteState {
+    const fn from_run_body_plan_state(
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerDrainCompleteStageState {
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    sequence_loop_controller_cursor_after_drain_state:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor,
+    sequence_loop_bridge_phase_cursor_after_drain_state:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    sequence_loop_controller_drained_step_count_state:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCount,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerDrainCompleteStageState {
+    const fn from_parts(
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+        sequence_loop_controller_cursor_after_drain_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor,
+        sequence_loop_bridge_phase_cursor_after_drain_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+        sequence_loop_controller_drained_step_count_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCount,
+    ) -> Self {
+        Self {
+            bridge_phase_executor_run_body_plan,
+            sequence_loop_controller_cursor_after_drain_state,
+            sequence_loop_bridge_phase_cursor_after_drain_state,
+            sequence_loop_controller_drained_step_count_state,
+        }
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+
+    fn sequence_loop_controller_cursor_after_drain_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursor {
+        self.sequence_loop_controller_cursor_after_drain_state
+    }
+
+    fn sequence_loop_bridge_phase_cursor_after_drain_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+        self.sequence_loop_bridge_phase_cursor_after_drain_state
+    }
+
+    fn sequence_loop_controller_drained_step_count_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCount {
+        self.sequence_loop_controller_drained_step_count_state
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDispatchCallsiteStageState {
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDispatchCallsiteStageState {
+    const fn from_run_body_plan_state(
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepsState {
+    bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+    bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepsState {
+    const fn from_parts(
+        bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+        bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_loop_phase,
+            bridge_loop_phase_index,
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_loop_phase(self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase {
+        self.bridge_loop_phase
+    }
+
+    fn bridge_loop_phase_index_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+        self.bridge_loop_phase_index
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointFromCursorState {
+    bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointFromCursorState {
+    const fn from_parts(
+        bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+        bridge_loop_phase: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase,
+    ) -> Self {
+        Self {
+            bridge_loop_phase_index,
+            bridge_loop_phase,
+        }
+    }
+
+    fn bridge_loop_phase_index_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+        self.bridge_loop_phase_index
+    }
+
+    fn bridge_loop_phase(self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase {
+        self.bridge_loop_phase
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseDescriptorFromRunBodyPlanState {
+    bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyPlan,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseDescriptorFromRunBodyPlanState {
+    const fn from_parts(
+        bridge_loop_phase_index: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyPlan,
+    ) -> Self {
+        Self {
+            bridge_loop_phase_index,
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_loop_phase_index_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+        self.bridge_loop_phase_index
+    }
+
+    fn bridge_phase_executor_run_body_plan(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyPlan {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseDescriptorFromGateDescriptorState {
+    bridge_gate_index: usize,
+    bridge_loop_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseDescriptorFromGateDescriptorState {
+    const fn from_parts(
+        bridge_gate_index: usize,
+        bridge_loop_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+    ) -> Self {
+        Self {
+            bridge_gate_index,
+            bridge_loop_gate,
+        }
+    }
+
+    fn bridge_gate_index(self) -> usize {
+        self.bridge_gate_index
+    }
+
+    fn bridge_loop_gate(self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate {
+        self.bridge_loop_gate
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseDescriptorFromCheckpointGateDescriptorState
+{
+    bridge_checkpoint_gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseDescriptorFromCheckpointGateDescriptorState {
+    const fn from_descriptor(
+        bridge_checkpoint_gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate_descriptor,
+        }
+    }
+
+    fn bridge_checkpoint_gate_descriptor(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate {
+        self.bridge_checkpoint_gate_descriptor
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateFromDescriptorState {
+    bridge_run_gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateFromDescriptorState {
+    const fn from_descriptor(
+        bridge_run_gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+    ) -> Self {
+        Self {
+            bridge_run_gate_descriptor,
+        }
+    }
+
+    fn bridge_run_gate_descriptor(self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate {
+        self.bridge_run_gate_descriptor
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateDescriptorLookupState {
+    bridge_gate_index: usize,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateDescriptorLookupState {
+    const fn from_index(bridge_gate_index: usize) -> Self {
+        Self { bridge_gate_index }
+    }
+
+    fn bridge_gate_index(self) -> usize {
+        self.bridge_gate_index
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginReadyDrainStepsState {
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginReadyDrainStepsState {
+    const fn from_run_body_plan_state(
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyDrainStepsState
+{
+    bridge_checkpoint_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate,
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyDrainStepsState {
+    const fn from_parts_state(
+        bridge_checkpoint_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate,
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate,
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_checkpoint_gate(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate {
+        self.bridge_checkpoint_gate
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyLookupState
+{
+    bridge_checkpoint_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate,
+}
+
+impl
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyLookupState
+{
+    const fn from_checkpoint_gate(
+        bridge_checkpoint_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate,
+        }
+    }
+
+    fn bridge_checkpoint_gate(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate {
+        self.bridge_checkpoint_gate
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyFromStepState
+{
+    bridge_checkpoint_gate_ready_step:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStep,
+}
+
+impl
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyFromStepState
+{
+    const fn from_step(
+        bridge_checkpoint_gate_ready_step:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStep,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate_ready_step,
+        }
+    }
+
+    fn bridge_checkpoint_gate_ready_step(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStep {
+        self.bridge_checkpoint_gate_ready_step
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStepLookupState {
+    bridge_checkpoint_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStepLookupState {
+    const fn from_checkpoint_gate(
+        bridge_checkpoint_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate,
+        }
+    }
+
+    fn bridge_checkpoint_gate(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate {
+        self.bridge_checkpoint_gate
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStepFromGateState {
+    bridge_checkpoint_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate,
+    bridge_checkpoint_gate_ready:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStepFromGateState {
+    const fn from_parts(
+        bridge_checkpoint_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate,
+        bridge_checkpoint_gate_ready:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate,
+            bridge_checkpoint_gate_ready,
+        }
+    }
+
+    fn bridge_checkpoint_gate(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate {
+        self.bridge_checkpoint_gate
+    }
+
+    fn bridge_checkpoint_gate_ready(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState {
+        self.bridge_checkpoint_gate_ready
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyLookupState {
+    bridge_checkpoint_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyLookupState {
+    const fn from_checkpoint_gate(
+        bridge_checkpoint_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate,
+        }
+    }
+
+    fn bridge_checkpoint_gate(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate {
+        self.bridge_checkpoint_gate
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateFromReadinessRowState {
+    bridge_checkpoint_gate_readiness:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateFromReadinessRowState {
+    const fn from_readiness_row(
+        bridge_checkpoint_gate_readiness:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate_readiness,
+        }
+    }
+
+    fn bridge_checkpoint_gate_readiness(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness {
+        self.bridge_checkpoint_gate_readiness
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateFromReadinessDescriptorState
+{
+    bridge_checkpoint_gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+    bridge_checkpoint_gate_readiness:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateFromReadinessDescriptorState {
+    const fn from_parts(
+        bridge_checkpoint_gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+        bridge_checkpoint_gate_readiness:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate_descriptor,
+            bridge_checkpoint_gate_readiness,
+        }
+    }
+
+    fn bridge_checkpoint_gate_descriptor(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate {
+        self.bridge_checkpoint_gate_descriptor
+    }
+
+    fn bridge_checkpoint_gate_readiness(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness {
+        self.bridge_checkpoint_gate_readiness
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowFromCursorState
+{
+    bridge_checkpoint_gate_readiness_cursor:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor,
+    bridge_checkpoint_gate_readiness_row_count:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowFromCursorState {
+    const fn from_parts(
+        bridge_checkpoint_gate_readiness_cursor:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor,
+        bridge_checkpoint_gate_readiness_row_count:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate_readiness_cursor,
+            bridge_checkpoint_gate_readiness_row_count,
+        }
+    }
+
+    fn bridge_checkpoint_gate_readiness_cursor(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor {
+        self.bridge_checkpoint_gate_readiness_cursor
+    }
+
+    fn bridge_checkpoint_gate_readiness_row_count(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount {
+        self.bridge_checkpoint_gate_readiness_row_count
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateFromReadinessCursorStepState
+{
+    bridge_checkpoint_gate_readiness_cursor_step:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStep,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateFromReadinessCursorStepState {
+    const fn from_cursor_step(
+        bridge_checkpoint_gate_readiness_cursor_step:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStep,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate_readiness_cursor_step,
+        }
+    }
+
+    fn bridge_checkpoint_gate_readiness_cursor_step(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStep {
+        self.bridge_checkpoint_gate_readiness_cursor_step
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStepConstructionState
+{
+    bridge_checkpoint_gate_readiness_cursor:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor,
+    bridge_checkpoint_gate_readiness_row_count:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount,
+    bridge_checkpoint_gate_readiness:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStepConstructionState {
+    const fn from_parts(
+        bridge_checkpoint_gate_readiness_cursor:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor,
+        bridge_checkpoint_gate_readiness_row_count:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount,
+        bridge_checkpoint_gate_readiness:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate_readiness_cursor,
+            bridge_checkpoint_gate_readiness_row_count,
+            bridge_checkpoint_gate_readiness,
+        }
+    }
+
+    fn bridge_checkpoint_gate_readiness_cursor(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor {
+        self.bridge_checkpoint_gate_readiness_cursor
+    }
+
+    fn bridge_checkpoint_gate_readiness_row_count(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount {
+        self.bridge_checkpoint_gate_readiness_row_count
+    }
+
+    fn bridge_checkpoint_gate_readiness(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness {
+        self.bridge_checkpoint_gate_readiness
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorAdvanceState
+{
+    bridge_checkpoint_gate_readiness_cursor_after_advance:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorAdvanceState {
+    fn from_cursor_advanced_by(
+        bridge_checkpoint_gate_readiness_cursor:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor,
+        bridge_checkpoint_gate_readiness_cursor_advance_step: usize,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate_readiness_cursor_after_advance:
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor::from_index(
+                    bridge_checkpoint_gate_readiness_cursor.index()
+                        + bridge_checkpoint_gate_readiness_cursor_advance_step,
+                ),
+        }
+    }
+
+    fn bridge_checkpoint_gate_readiness_cursor_after_advance(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursor {
+        self.bridge_checkpoint_gate_readiness_cursor_after_advance
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursorAdvanceState {
+    bridge_loop_phase_cursor_after_advance:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursorAdvanceState {
+    fn from_cursor_advanced_by(
+        bridge_loop_phase_cursor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor,
+        bridge_loop_phase_cursor_advance_step: usize,
+    ) -> Self {
+        Self {
+            bridge_loop_phase_cursor_after_advance:
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor::from_index(
+                    bridge_loop_phase_cursor.index() + bridge_loop_phase_cursor_advance_step,
+                ),
+        }
+    }
+
+    fn bridge_loop_phase_cursor_after_advance(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursor {
+        self.bridge_loop_phase_cursor_after_advance
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyCompleteState
+{
+    bridge_checkpoint_gate_ready:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReady,
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyCompleteState
+{
+    const fn from_parts_state(
+        bridge_checkpoint_gate_ready:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReady,
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate_ready,
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_checkpoint_gate_ready(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReady {
+        self.bridge_checkpoint_gate_ready
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyDriverState
+{
+    bridge_checkpoint_gate_ready:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReady,
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyDriverState
+{
+    const fn from_parts_state(
+        bridge_checkpoint_gate_ready:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReady,
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate_ready,
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_checkpoint_gate_ready(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReady {
+        self.bridge_checkpoint_gate_ready
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateDriverState {
+    bridge_checkpoint_gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateDriverState {
+    const fn from_parts_state(
+        bridge_checkpoint_gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate_descriptor,
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_checkpoint_gate_descriptor(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate {
+        self.bridge_checkpoint_gate_descriptor
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyStageState
+{
+    bridge_checkpoint_gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    bridge_phase_executor_phase2_pre_checkpoint_prepare_preserved:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase2PreCheckpointPreparePreservationState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyStageState {
+    const fn from_parts_state(
+        bridge_checkpoint_gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+        bridge_phase_executor_phase2_pre_checkpoint_prepare_preserved:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase2PreCheckpointPreparePreservationState,
+    ) -> Self {
+        Self {
+            bridge_checkpoint_gate_descriptor,
+            bridge_phase_executor_run_body_plan,
+            bridge_phase_executor_phase2_pre_checkpoint_prepare_preserved,
+        }
+    }
+
+    fn bridge_checkpoint_gate_descriptor(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate {
+        self.bridge_checkpoint_gate_descriptor
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+
+    fn bridge_phase_executor_phase2_pre_checkpoint_prepare_preserved(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase2PreCheckpointPreparePreservationState
+    {
+        self.bridge_phase_executor_phase2_pre_checkpoint_prepare_preserved
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCompleteState {
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCompleteState {
+    const fn from_run_body_plan_state(
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyBeginState {
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyBeginState {
+    const fn from_run_body_plan_state(
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginState {
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginState {
+    const fn from_run_body_plan_state(
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginCheckpointInvocationState
+{
+    bridge_phase_executor_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+}
+
+impl
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginCheckpointInvocationState
+{
+    const fn from_run_body_plan_state(
+        bridge_phase_executor_run_body_plan:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState,
+    ) -> Self {
+        Self {
+            bridge_phase_executor_run_body_plan,
+        }
+    }
+
+    fn bridge_phase_executor_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState
+    {
+        self.bridge_phase_executor_run_body_plan
+    }
+}
+
+trait QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrain {
+    fn run(
+        &mut self,
+        controller_ready_drain_dispatch_run_step_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchRunStepState,
+    ) -> Result<()>;
+}
+
+impl<F> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrain for F
+where
+    F: FnMut(
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStep,
+    ) -> Result<()>,
+{
+    fn run(
+        &mut self,
+        controller_ready_drain_dispatch_run_step_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchRunStepState,
+    ) -> Result<()> {
+        let controller_ready_drain_step =
+            controller_ready_drain_dispatch_run_step_state.controller_ready_drain_step();
+        self(controller_ready_drain_step)
+    }
+}
+
+#[derive(Clone, Copy)]
+enum QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrainStep {
+    BeforeCheckpoint,
+    ControllerReadyDrainStep,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrainStep {
+    fn before_checkpoint_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointDrainBeforeCheckpointState
+    {
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointDrainBeforeCheckpointState::from_enabled(
+            matches!(self, Self::BeforeCheckpoint),
+        )
+    }
+}
+
+trait QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrain {
+    fn run(
+        &mut self,
+        checkpoint_gate_ready_drain_step:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrainStep,
+    ) -> Result<()>;
+}
+
+impl<F> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrain for F
+where
+    F: FnMut(
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrainStep,
+    ) -> Result<()>,
+{
+    fn run(
+        &mut self,
+        checkpoint_gate_ready_drain_step:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrainStep,
+    ) -> Result<()> {
+        self(checkpoint_gate_ready_drain_step)
+    }
+}
+
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyControllerDrainAdapter<
+    'drain,
+> {
+    dispatch_checkpoint_gate_ready_drain_step:
+        &'drain mut dyn QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrain,
+}
+
+impl<'drain>
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyControllerDrainAdapter<
+        'drain,
+    >
+{
+    fn new(
+        dispatch_checkpoint_gate_ready_drain_step:
+            &'drain mut dyn QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrain,
+    ) -> Self {
+        Self {
+            dispatch_checkpoint_gate_ready_drain_step,
+        }
+    }
+}
+
+impl<'drain> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrain
+    for QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyControllerDrainAdapter<
+        'drain,
+    >
+{
+    fn run(
+        &mut self,
+        _controller_ready_drain_dispatch_run_step_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchRunStepState,
+    ) -> Result<()> {
+        self.dispatch_checkpoint_gate_ready_drain_step.run(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrainStep::ControllerReadyDrainStep,
+        )
+    }
+}
+
+trait QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyPreCheckpointControllerDrain
+{
+    fn run(
+        &mut self,
+        before_checkpoint:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointDrainBeforeCheckpointState,
+    ) -> Result<()>;
+}
+
+impl<F>
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyPreCheckpointControllerDrain
+    for F
+where
+    F: FnMut(bool) -> Result<()>,
+{
+    fn run(
+        &mut self,
+        before_checkpoint:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointDrainBeforeCheckpointState,
+    ) -> Result<()> {
+        self(before_checkpoint.enabled())
+    }
+}
+
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyPreCheckpointControllerDrainAdapter<'drain>
+{
+    dispatch_checkpoint_gate_ready_drain_step:
+        &'drain mut dyn QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyPreCheckpointControllerDrain,
+}
+
+impl<'drain>
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyPreCheckpointControllerDrainAdapter<'drain>
+{
+    fn new(
+        dispatch_checkpoint_gate_ready_drain_step:
+            &'drain mut dyn QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyPreCheckpointControllerDrain,
+    ) -> Self {
+        Self {
+            dispatch_checkpoint_gate_ready_drain_step,
+        }
+    }
+}
+
+impl<'drain> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrain
+    for QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyPreCheckpointControllerDrainAdapter<'drain>
+{
+    fn run(
+        &mut self,
+        checkpoint_gate_ready_drain_step:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrainStep,
+    ) -> Result<()> {
+        self.dispatch_checkpoint_gate_ready_drain_step
+            .run(checkpoint_gate_ready_drain_step.before_checkpoint_state())
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyPlan {
+    phase_count: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseRowCount,
+    gate_count: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCount,
+    checkpoint_gate_readiness_row_count:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount,
+    phase_table_used: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseTableUsageState,
+    gate_table_used: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableUsageState,
+    run_body_metadata_used:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyMetadataUsageState,
+    begin_phase_count_from_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopBeginPhaseCountRunBodyPlanSourceState,
+    checkpoint_phase_count_from_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointPhaseCountRunBodyPlanSourceState,
+    completion_counts_from_run_body_plan:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionCountRunBodyPlanSourceState,
+    run_body_counts_from_tables:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCountTableSourceState,
+    completion_guard_used: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionGuardState,
+    consumed_all_phase_rows:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllPhaseRowsState,
+    consumed_all_gate_rows:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllGateRowsState,
+    consumed_all_checkpoint_gate_readiness_rows:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllCheckpointGateReadinessRowsState,
+    step_cursor_reached_step_count:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopStepCursorReachedStepCountState,
+    ready_count_reached_step_count:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyCountReachedStepCountState,
+    checkpoint_gate_driver_used:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDriverUsageState,
+    checkpoint_gate_readiness_cursor_used:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorUsageState,
+    checkpoint_gate_construction_table_driven:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateConstructionTableDrivenState,
+    explicit_checkpoint_gate_builder_literals_removed:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExplicitCheckpointGateBuilderLiteralsRemovedState,
+    consumed_matching_gate_descriptor:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedMatchingGateDescriptorState,
+    gate_descriptor_bound_to_phase_table:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateDescriptorBoundToPhaseTableState,
+    checkpoint_gate_helper_indexed:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateHelperIndexingState,
+    phase_specific_checkpoint_gate_helpers_removed:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseSpecificCheckpointGateHelpersRemovalState,
+    all_checkpoint_bodies_owned_by_phase_executor:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointBodyOwnershipState,
+    phase0_checkpoint_body_owned_by_begin:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCheckpointBodyOwnershipState,
+    phase1_checkpoint_body_owned_by_gate_ready:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCheckpointBodyOwnershipState,
+    phase2_checkpoint_body_owned_by_gate_ready:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCheckpointBodyOwnershipState,
+    phase2_pre_checkpoint_prepare_phase_index:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPlanPhase2PreCheckpointPreparePhaseIndexState,
+    checkpoint_gate_invocation_source:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPlanCheckpointInvocationSourceState,
+    phase0_checkpoint_invocation_moved_into_begin:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase0CheckpointInvocationPlacementState,
+    remaining_interleaved_checkpoint_count:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRemainingInterleavedCheckpointCount,
+    checkpoint_invocations_remain_interleaved:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationInterleavingState,
+    enclosing_run_used:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunState,
+    single_run_entry:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorSingleRunEntryState,
+    main_entry_callsite_count:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorMainEntryCallsiteCountState,
+    enclosing_run_active_during_checkpoint:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunCheckpointState,
+    checkpoint_invocation_owned_by_enclosing_run:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationOwnershipState,
+    run_body_driver_used:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyDriverState,
+    begin_owned_by_run_body_driver:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyDriverBeginOwnershipState,
+    enclosing_run_closed:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunClosedState,
+    active_after_complete:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveAfterCompleteState,
+    phase_executor_owns_phase_advance:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPhaseAdvanceOwnershipState,
+    checkpoint_callsite_routed_through_phase_executor:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointCallsiteRoutingState,
+    ready_step_count_from_phase_table:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorReadyStepPhaseTableState,
+    gate_table_run_gate_separate_from_checkpoint_gates:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableSeparationState,
+    phase_cursor_bound_to_checkpoint:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursorCheckpointBindingState,
+    no_argument_ready_checkpoint:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopNoArgumentReadyCheckpointState,
+    checkpoint_bound_to_existing_gate:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointExistingGateBindingState,
+    controller_ready_drain_active:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainActiveState,
+    controller_step_index_derived_from_cursor:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepIndexCursorDerivationState,
+    helper_invocation_bound_to_controller_cursor:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopHelperInvocationControllerCursorBindingState,
+    direct_helper_invocation_replaced_by_controller_step:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDirectHelperInvocationControllerStepReplacementState,
+    direct_controller_next_invocations_removed:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDirectControllerNextInvocationRemovalState,
+    explicit_controller_step_literals_removed:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExplicitControllerStepLiteralsRemovalState,
+    controller_cursor_validated_against_step_count:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursorStepCountValidationState,
+    controller_cursor_advances_before_shared_driver:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursorSharedDriverAdvanceState,
+    controller_step_dispatched_by_ready_drain_loop:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepReadyDrainDispatchState,
+    shared_driver_callsite_used:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopSharedDriverCallsiteUsageState,
+    main_apply_sequence_driver_callsites_collapsed:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopMainApplySequenceDriverCallsiteCollapseState,
+    main_apply_sequence_buffer_window_callsites_collapsed:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopMainApplySequenceBufferWindowCallsiteCollapseState,
+    interleaved_bridge_work_preserved:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopInterleavedBridgeWorkPreservationState,
+    gates_remain_interleaved: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateInterleavingState,
+    sequence_loop_started: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopSequenceLoopStartState,
+    execution_path_changed: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExecutionPathChangeState,
+    hip_graph_capture_started: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopHipGraphCaptureStartState,
+    layer_specific_body_inline:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopLayerSpecificBodyInlineState,
+    completion_order_preserved_inside_body:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionOrderPreservationState,
+    body_wrapper_avoided: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopBodyWrapperAvoidanceState,
+}
+
+impl QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyPlan {
+    fn from_table_count_states(
+        phase_count: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseRowCount,
+        gate_count: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCount,
+        checkpoint_gate_readiness_row_count:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount,
+    ) -> Self {
+        Self {
+            phase_count,
+            gate_count,
+            checkpoint_gate_readiness_row_count,
+            phase_table_used:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_TABLE_USED,
+            gate_table_used:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_USED,
+            run_body_metadata_used:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_BODY_METADATA_USED,
+            begin_phase_count_from_run_body_plan:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_BEGIN_PHASE_COUNT_FROM_RUN_BODY_PLAN,
+            checkpoint_phase_count_from_run_body_plan:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_PHASE_COUNT_FROM_RUN_BODY_PLAN,
+            completion_counts_from_run_body_plan:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_COMPLETION_COUNTS_FROM_RUN_BODY_PLAN,
+            run_body_counts_from_tables:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_BODY_COUNTS_FROM_TABLES,
+            completion_guard_used:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_COMPLETION_GUARD_USED,
+            consumed_all_phase_rows:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONSUMED_ALL_PHASE_ROWS,
+            consumed_all_gate_rows:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONSUMED_ALL_GATE_ROWS,
+            consumed_all_checkpoint_gate_readiness_rows:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONSUMED_ALL_CHECKPOINT_GATE_READINESS_ROWS,
+            step_cursor_reached_step_count:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_STEP_CURSOR_REACHED_STEP_COUNT,
+            ready_count_reached_step_count:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_READY_COUNT_REACHED_STEP_COUNT,
+            checkpoint_gate_driver_used:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_DRIVER_USED,
+            checkpoint_gate_readiness_cursor_used:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READINESS_CURSOR_USED,
+            checkpoint_gate_construction_table_driven:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_CONSTRUCTION_TABLE_DRIVEN,
+            explicit_checkpoint_gate_builder_literals_removed:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_EXPLICIT_CHECKPOINT_GATE_BUILDER_LITERALS_REMOVED,
+            consumed_matching_gate_descriptor:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONSUMED_MATCHING_GATE_DESCRIPTOR,
+            gate_descriptor_bound_to_phase_table:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_DESCRIPTOR_BOUND_TO_PHASE_TABLE,
+            checkpoint_gate_helper_indexed:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_HELPER_INDEXED,
+            phase_specific_checkpoint_gate_helpers_removed:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_SPECIFIC_CHECKPOINT_GATE_HELPERS_REMOVED,
+            all_checkpoint_bodies_owned_by_phase_executor:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_ALL_CHECKPOINT_BODIES_OWNED_BY_PHASE_EXECUTOR,
+            phase0_checkpoint_body_owned_by_begin:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE0_CHECKPOINT_BODY_OWNED_BY_BEGIN,
+            phase1_checkpoint_body_owned_by_gate_ready:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE1_CHECKPOINT_BODY_OWNED_BY_GATE_READY,
+            phase2_checkpoint_body_owned_by_gate_ready:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE2_CHECKPOINT_BODY_OWNED_BY_GATE_READY,
+            phase2_pre_checkpoint_prepare_phase_index:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_PLAN_PHASE2_PRE_CHECKPOINT_PREPARE_PHASE_INDEX,
+            checkpoint_gate_invocation_source:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_PLAN_GATE_READY_CHECKPOINT_INVOCATION_SOURCE,
+            phase0_checkpoint_invocation_moved_into_begin:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE0_CHECKPOINT_INVOCATION_MOVED_INTO_BEGIN,
+            remaining_interleaved_checkpoint_count:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_REMAINING_INTERLEAVED_CHECKPOINT_COUNT,
+            checkpoint_invocations_remain_interleaved:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_CHECKPOINT_INVOCATIONS_REMAIN_INTERLEAVED,
+            enclosing_run_used:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_ENCLOSING_RUN_USED,
+            single_run_entry:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_SINGLE_RUN_ENTRY,
+            main_entry_callsite_count:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_MAIN_ENTRY_CALLSITE_COUNT,
+            enclosing_run_active_during_checkpoint:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_ENCLOSING_RUN_ACTIVE_DURING_CHECKPOINT,
+            checkpoint_invocation_owned_by_enclosing_run:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_CHECKPOINT_INVOCATION_OWNED_BY_ENCLOSING_RUN,
+            run_body_driver_used:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_RUN_BODY_DRIVER_USED,
+            begin_owned_by_run_body_driver:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_BEGIN_OWNED_BY_RUN_BODY_DRIVER,
+            enclosing_run_closed:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_ENCLOSING_RUN_CLOSED,
+            active_after_complete:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_ACTIVE_AFTER_COMPLETE,
+            phase_executor_owns_phase_advance:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_OWNS_PHASE_ADVANCE,
+            checkpoint_callsite_routed_through_phase_executor:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_CHECKPOINT_CALLSITE_ROUTED_THROUGH_PHASE_EXECUTOR,
+            ready_step_count_from_phase_table:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_READY_STEP_COUNT_FROM_PHASE_TABLE,
+            gate_table_run_gate_separate_from_checkpoint_gates:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_RUN_GATE_SEPARATE_FROM_CHECKPOINT_GATES,
+            phase_cursor_bound_to_checkpoint:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_CURSOR_BOUND_TO_CHECKPOINT,
+            no_argument_ready_checkpoint:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_NO_ARGUMENT_READY_CHECKPOINT,
+            checkpoint_bound_to_existing_gate:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_BOUND_TO_EXISTING_GATE,
+            controller_ready_drain_active:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_READY_DRAIN_ACTIVE,
+            controller_step_index_derived_from_cursor:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_STEP_INDEX_DERIVED_FROM_CURSOR,
+            helper_invocation_bound_to_controller_cursor:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_HELPER_INVOCATION_BOUND_TO_CONTROLLER_CURSOR,
+            direct_helper_invocation_replaced_by_controller_step:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_DIRECT_HELPER_INVOCATION_REPLACED_BY_CONTROLLER_STEP,
+            direct_controller_next_invocations_removed:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_DIRECT_CONTROLLER_NEXT_INVOCATIONS_REMOVED,
+            explicit_controller_step_literals_removed:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_EXPLICIT_CONTROLLER_STEP_LITERALS_REMOVED,
+            controller_cursor_validated_against_step_count:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_CURSOR_VALIDATED_AGAINST_STEP_COUNT,
+            controller_cursor_advances_before_shared_driver:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_CURSOR_ADVANCES_BEFORE_SHARED_DRIVER,
+            controller_step_dispatched_by_ready_drain_loop:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_STEP_DISPATCHED_BY_READY_DRAIN_LOOP,
+            shared_driver_callsite_used:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SHARED_DRIVER_CALLSITE_USED,
+            main_apply_sequence_driver_callsites_collapsed:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_MAIN_APPLY_SEQUENCE_DRIVER_CALLSITES_COLLAPSED,
+            main_apply_sequence_buffer_window_callsites_collapsed:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_MAIN_APPLY_SEQUENCE_BUFFER_WINDOW_CALLSITES_COLLAPSED,
+            interleaved_bridge_work_preserved:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_INTERLEAVED_BRIDGE_WORK_PRESERVED,
+            gates_remain_interleaved:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATES_REMAIN_INTERLEAVED,
+            sequence_loop_started:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SEQUENCE_LOOP_STARTED,
+            execution_path_changed:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_EXECUTION_PATH_CHANGED,
+            hip_graph_capture_started:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_HIP_GRAPH_CAPTURE_STARTED,
+            layer_specific_body_inline:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_LAYER_SPECIFIC_BODY_INLINE,
+            completion_order_preserved_inside_body:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_COMPLETION_ORDER_PRESERVED_INSIDE_BODY,
+            body_wrapper_avoided:
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_BODY_WRAPPER_AVOIDED,
+        }
+    }
+
+    fn phase_count_state(self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseRowCount {
+        self.phase_count
+    }
+
+    fn gate_count_state(self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCount {
+        self.gate_count
+    }
+
+    fn checkpoint_gate_readiness_row_count_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount {
+        self.checkpoint_gate_readiness_row_count
+    }
+
+    fn checkpoint_gate_invocation_source_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPlanCheckpointInvocationSourceState
+    {
+        self.checkpoint_gate_invocation_source
+    }
+
+    fn phase_table_used_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseTableUsageState {
+        self.phase_table_used
+    }
+
+    fn gate_table_used_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableUsageState {
+        self.gate_table_used
+    }
+
+    fn phase2_pre_checkpoint_prepare_phase_index_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPlanPhase2PreCheckpointPreparePhaseIndexState{
+        self.phase2_pre_checkpoint_prepare_phase_index
+    }
+
+    fn main_entry_callsite_count_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorMainEntryCallsiteCountState
+    {
+        self.main_entry_callsite_count
+    }
+
+    fn remaining_interleaved_checkpoint_count_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRemainingInterleavedCheckpointCount
+    {
+        self.remaining_interleaved_checkpoint_count
+    }
+
+    fn checkpoint_invocations_remain_interleaved_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationInterleavingState
+    {
+        self.checkpoint_invocations_remain_interleaved
+    }
+
+    fn enclosing_run_used_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunState {
+        self.enclosing_run_used
+    }
+
+    fn single_run_entry_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorSingleRunEntryState {
+        self.single_run_entry
+    }
+
+    fn active_after_complete_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorActiveAfterCompleteState
+    {
+        self.active_after_complete
+    }
+
+    fn run_body_driver_used_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyDriverState {
+        self.run_body_driver_used
+    }
+
+    fn begin_owned_by_run_body_driver_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyDriverBeginOwnershipState
+    {
+        self.begin_owned_by_run_body_driver
+    }
+
+    fn enclosing_run_closed_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunClosedState
+    {
+        self.enclosing_run_closed
+    }
+
+    fn enclosing_run_active_during_checkpoint_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorEnclosingRunCheckpointState
+    {
+        self.enclosing_run_active_during_checkpoint
+    }
+
+    fn checkpoint_invocation_owned_by_enclosing_run_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointInvocationOwnershipState
+    {
+        self.checkpoint_invocation_owned_by_enclosing_run
+    }
+
+    fn phase_executor_owns_phase_advance_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorPhaseAdvanceOwnershipState
+    {
+        self.phase_executor_owns_phase_advance
+    }
+
+    fn checkpoint_callsite_routed_through_phase_executor_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointCallsiteRoutingState
+    {
+        self.checkpoint_callsite_routed_through_phase_executor
+    }
+
+    fn ready_step_count_from_phase_table_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorReadyStepPhaseTableState
+    {
+        self.ready_step_count_from_phase_table
+    }
+
+    fn gate_table_run_gate_separate_from_checkpoint_gates_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateTableSeparationState {
+        self.gate_table_run_gate_separate_from_checkpoint_gates
+    }
+
+    fn checkpoint_gate_helper_indexed_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateHelperIndexingState {
+        self.checkpoint_gate_helper_indexed
+    }
+
+    fn phase_specific_checkpoint_gate_helpers_removed_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseSpecificCheckpointGateHelpersRemovalState
+    {
+        self.phase_specific_checkpoint_gate_helpers_removed
+    }
+
+    fn all_checkpoint_bodies_owned_by_phase_executor_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointBodyOwnershipState {
+        self.all_checkpoint_bodies_owned_by_phase_executor
+    }
+
+    fn phase0_checkpoint_body_owned_by_begin_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCheckpointBodyOwnershipState {
+        self.phase0_checkpoint_body_owned_by_begin
+    }
+
+    fn phase1_checkpoint_body_owned_by_gate_ready_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCheckpointBodyOwnershipState {
+        self.phase1_checkpoint_body_owned_by_gate_ready
+    }
+
+    fn phase2_checkpoint_body_owned_by_gate_ready_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCheckpointBodyOwnershipState {
+        self.phase2_checkpoint_body_owned_by_gate_ready
+    }
+
+    fn phase0_checkpoint_invocation_moved_into_begin_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase0CheckpointInvocationPlacementState
+    {
+        self.phase0_checkpoint_invocation_moved_into_begin
+    }
+
+    fn phase_cursor_bound_to_checkpoint_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursorCheckpointBindingState {
+        self.phase_cursor_bound_to_checkpoint
+    }
+
+    fn no_argument_ready_checkpoint_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopNoArgumentReadyCheckpointState {
+        self.no_argument_ready_checkpoint
+    }
+
+    fn checkpoint_bound_to_existing_gate_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointExistingGateBindingState {
+        self.checkpoint_bound_to_existing_gate
+    }
+
+    fn controller_ready_drain_active_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainActiveState {
+        self.controller_ready_drain_active
+    }
+
+    fn controller_step_index_derived_from_cursor_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepIndexCursorDerivationState
+    {
+        self.controller_step_index_derived_from_cursor
+    }
+
+    fn helper_invocation_bound_to_controller_cursor_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopHelperInvocationControllerCursorBindingState{
+        self.helper_invocation_bound_to_controller_cursor
+    }
+
+    fn direct_helper_invocation_replaced_by_controller_step_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDirectHelperInvocationControllerStepReplacementState{
+        self.direct_helper_invocation_replaced_by_controller_step
+    }
+
+    fn direct_controller_next_invocations_removed_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDirectControllerNextInvocationRemovalState
+    {
+        self.direct_controller_next_invocations_removed
+    }
+
+    fn explicit_controller_step_literals_removed_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExplicitControllerStepLiteralsRemovalState
+    {
+        self.explicit_controller_step_literals_removed
+    }
+
+    fn controller_cursor_validated_against_step_count_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursorStepCountValidationState
+    {
+        self.controller_cursor_validated_against_step_count
+    }
+
+    fn controller_cursor_advances_before_shared_driver_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerCursorSharedDriverAdvanceState
+    {
+        self.controller_cursor_advances_before_shared_driver
+    }
+
+    fn controller_step_dispatched_by_ready_drain_loop_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStepReadyDrainDispatchState
+    {
+        self.controller_step_dispatched_by_ready_drain_loop
+    }
+
+    fn shared_driver_callsite_used_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopSharedDriverCallsiteUsageState {
+        self.shared_driver_callsite_used
+    }
+
+    fn main_apply_sequence_driver_callsites_collapsed_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopMainApplySequenceDriverCallsiteCollapseState{
+        self.main_apply_sequence_driver_callsites_collapsed
+    }
+
+    fn main_apply_sequence_buffer_window_callsites_collapsed_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopMainApplySequenceBufferWindowCallsiteCollapseState{
+        self.main_apply_sequence_buffer_window_callsites_collapsed
+    }
+
+    fn interleaved_bridge_work_preserved_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopInterleavedBridgeWorkPreservationState
+    {
+        self.interleaved_bridge_work_preserved
+    }
+
+    fn gates_remain_interleaved_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateInterleavingState {
+        self.gates_remain_interleaved
+    }
+
+    fn sequence_loop_started_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopSequenceLoopStartState {
+        self.sequence_loop_started
+    }
+
+    fn execution_path_changed_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExecutionPathChangeState {
+        self.execution_path_changed
+    }
+
+    fn hip_graph_capture_started_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopHipGraphCaptureStartState {
+        self.hip_graph_capture_started
+    }
+
+    fn layer_specific_body_inline_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopLayerSpecificBodyInlineState {
+        self.layer_specific_body_inline
+    }
+
+    fn completion_order_preserved_inside_body_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionOrderPreservationState {
+        self.completion_order_preserved_inside_body
+    }
+
+    fn body_wrapper_avoided_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopBodyWrapperAvoidanceState {
+        self.body_wrapper_avoided
+    }
+
+    fn run_body_metadata_used_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyMetadataUsageState {
+        self.run_body_metadata_used
+    }
+
+    fn run_body_counts_from_tables_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCountTableSourceState {
+        self.run_body_counts_from_tables
+    }
+
+    fn begin_phase_count_from_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopBeginPhaseCountRunBodyPlanSourceState
+    {
+        self.begin_phase_count_from_run_body_plan
+    }
+
+    fn checkpoint_phase_count_from_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointPhaseCountRunBodyPlanSourceState
+    {
+        self.checkpoint_phase_count_from_run_body_plan
+    }
+
+    fn completion_counts_from_run_body_plan_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionCountRunBodyPlanSourceState
+    {
+        self.completion_counts_from_run_body_plan
+    }
+
+    fn completion_guard_used_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCompletionGuardState {
+        self.completion_guard_used
+    }
+
+    fn consumed_all_phase_rows_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllPhaseRowsState {
+        self.consumed_all_phase_rows
+    }
+
+    fn consumed_all_gate_rows_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllGateRowsState {
+        self.consumed_all_gate_rows
+    }
+
+    fn consumed_all_checkpoint_gate_readiness_rows_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedAllCheckpointGateReadinessRowsState
+    {
+        self.consumed_all_checkpoint_gate_readiness_rows
+    }
+
+    fn step_cursor_reached_step_count_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopStepCursorReachedStepCountState {
+        self.step_cursor_reached_step_count
+    }
+
+    fn ready_count_reached_step_count_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyCountReachedStepCountState {
+        self.ready_count_reached_step_count
+    }
+
+    fn checkpoint_gate_driver_used_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateDriverUsageState {
+        self.checkpoint_gate_driver_used
+    }
+
+    fn checkpoint_gate_readiness_cursor_used_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorUsageState
+    {
+        self.checkpoint_gate_readiness_cursor_used
+    }
+
+    fn checkpoint_gate_construction_table_driven_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateConstructionTableDrivenState
+    {
+        self.checkpoint_gate_construction_table_driven
+    }
+
+    fn explicit_checkpoint_gate_builder_literals_removed_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopExplicitCheckpointGateBuilderLiteralsRemovedState{
+        self.explicit_checkpoint_gate_builder_literals_removed
+    }
+
+    fn consumed_matching_gate_descriptor_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopConsumedMatchingGateDescriptorState
+    {
+        self.consumed_matching_gate_descriptor
+    }
+
+    fn gate_descriptor_bound_to_phase_table_state(
+        self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateDescriptorBoundToPhaseTableState
+    {
+        self.gate_descriptor_bound_to_phase_table
+    }
+
+    fn from_table_view(
+        tables: &QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTableView<'_>,
+    ) -> Self {
+        Self::from_table_count_states(
+            tables.phase_count_state(),
+            tables.gate_count_state(),
+            tables.checkpoint_gate_readiness_row_count_state(),
+        )
+    }
+}
+
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame<'a> {
+    tables: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTableView<'a>,
+    run_gate_plan_ready: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanReady,
+    runtime_state: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRuntimeState,
+    run_body_plan: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyPlan,
+}
+
+trait QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyRunGate<'a> {
+    fn run(
+        self,
+        frame: &QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame<'a>,
+    ) -> Result<()>;
+}
+
+impl<'a, F> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyRunGate<'a> for F
+where
+    F: FnOnce(&QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame<'a>) -> Result<()>,
+{
+    fn run(
+        self,
+        frame: &QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame<'a>,
+    ) -> Result<()> {
+        self(frame)
+    }
+}
+
+trait QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCloseAfter<'a> {
+    fn run(
+        self,
+        frame: &QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame<'a>,
+    ) -> Result<()>;
+}
+
+impl<'a, F> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCloseAfter<'a> for F
+where
+    F: FnOnce(&QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame<'a>) -> Result<()>,
+{
+    fn run(
+        self,
+        frame: &QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame<'a>,
+    ) -> Result<()> {
+        self(frame)
+    }
+}
+
+pub(crate) trait DenseApplySequenceBridgeLoopCheckpointContext {
+    fn is_before_checkpoint(&self) -> bool;
+}
+
+pub(crate) type DenseApplySequenceBridgeLoopCheckpointContextRef<'step> =
+    &'step (dyn DenseApplySequenceBridgeLoopCheckpointContext + 'step);
+
+pub(crate) trait DenseApplySequenceBridgeLoopOpenControllerReadyDrain {
+    fn run(&mut self) -> Result<()>;
+}
+
+impl<F> DenseApplySequenceBridgeLoopOpenControllerReadyDrain for F
+where
+    F: FnMut() -> Result<()>,
+{
+    fn run(&mut self) -> Result<()> {
+        self()
+    }
+}
+
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopOpenControllerReadyControllerDrainAdapter<
+    'drain,
+> {
+    open_controller_ready_drain_step:
+        &'drain mut dyn DenseApplySequenceBridgeLoopOpenControllerReadyDrain,
+}
+
+impl<'drain>
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopOpenControllerReadyControllerDrainAdapter<
+        'drain,
+    >
+{
+    fn new(
+        open_controller_ready_drain_step:
+            &'drain mut dyn DenseApplySequenceBridgeLoopOpenControllerReadyDrain,
+    ) -> Self {
+        Self {
+            open_controller_ready_drain_step,
+        }
+    }
+}
+
+impl<'drain> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrain
+    for QwenResidentLayerRunnerDenseApplySequenceBridgeLoopOpenControllerReadyControllerDrainAdapter<
+        'drain,
+    >
+{
+    fn run(
+        &mut self,
+        _controller_ready_drain_dispatch_run_step_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchRunStepState,
+    ) -> Result<()> {
+        self.open_controller_ready_drain_step.run()
+    }
+}
+
+pub(crate) trait DenseApplySequenceBridgeLoopCheckpointDrain {
+    fn run(
+        &mut self,
+        checkpoint_context: DenseApplySequenceBridgeLoopCheckpointContextRef<'_>,
+    ) -> Result<()>;
+}
+
+impl<F> DenseApplySequenceBridgeLoopCheckpointDrain for F
+where
+    F: for<'step> FnMut(DenseApplySequenceBridgeLoopCheckpointContextRef<'step>) -> Result<()>,
+{
+    fn run(
+        &mut self,
+        checkpoint_context: DenseApplySequenceBridgeLoopCheckpointContextRef<'_>,
+    ) -> Result<()> {
+        self(checkpoint_context)
+    }
+}
+
+pub(crate) trait DenseApplySequenceBridgeLoopRunBodyContext {
+    fn drain_open_controller_ready(
+        &self,
+        open_controller_ready_drain_step: &mut dyn DenseApplySequenceBridgeLoopOpenControllerReadyDrain,
+    ) -> Result<bool>;
+
+    fn next_checkpoint_gate_ready(
+        &self,
+        dispatch_checkpoint_gate_ready_drain_step:
+            &mut dyn DenseApplySequenceBridgeLoopCheckpointDrain,
+    ) -> Result<bool>;
+}
+
+pub(crate) type DenseApplySequenceBridgeLoopRunBodyContextRef<'frame> =
+    &'frame (dyn DenseApplySequenceBridgeLoopRunBodyContext + 'frame);
+
+pub(crate) trait DenseApplySequenceBridgeLoopRunBody {
+    fn run(
+        &mut self,
+        run_body_context: DenseApplySequenceBridgeLoopRunBodyContextRef<'_>,
+    ) -> Result<()>;
+}
+
+impl<F> DenseApplySequenceBridgeLoopRunBody for F
+where
+    F: for<'frame> FnMut(DenseApplySequenceBridgeLoopRunBodyContextRef<'frame>) -> Result<()>,
+{
+    fn run(
+        &mut self,
+        run_body_context: DenseApplySequenceBridgeLoopRunBodyContextRef<'_>,
+    ) -> Result<()> {
+        self(run_body_context)
+    }
+}
+
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyRunGateRunBodyAdapter<F> {
+    run_bridge_body: F,
+}
+
+impl<F> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyRunGateRunBodyAdapter<F> {
+    fn new(run_bridge_body: F) -> Self {
+        Self { run_bridge_body }
+    }
+}
+
+impl<'a, F> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyRunGate<'a>
+    for QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyRunGateRunBodyAdapter<F>
+where
+    F: DenseApplySequenceBridgeLoopRunBody,
+{
+    fn run(
+        self,
+        frame: &QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame<'a>,
+    ) -> Result<()> {
+        frame.phase_executor_run_body(self.run_bridge_body)
+    }
+}
+
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyOpenDrainAdapter<
+    'body,
+    'frame,
+    'a,
+    F,
+> {
+    frame: &'frame QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame<'a>,
+    run_bridge_body: &'body mut F,
+}
+
+impl<'body, 'frame, 'a, F>
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyOpenDrainAdapter<'body, 'frame, 'a, F>
+{
+    fn new(
+        frame: &'frame QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame<'a>,
+        run_bridge_body: &'body mut F,
+    ) -> Self {
+        Self {
+            frame,
+            run_bridge_body,
+        }
+    }
+}
+
+impl<'body, 'frame, 'a, F> DenseApplySequenceBridgeLoopOpenControllerReadyDrain
+    for QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyOpenDrainAdapter<
+        'body,
+        'frame,
+        'a,
+        F,
+    >
+where
+    F: DenseApplySequenceBridgeLoopRunBody,
+{
+    fn run(&mut self) -> Result<()> {
+        let run_body_scope = DenseApplySequenceBridgeLoopRunBodyScope::new(
+            self.frame,
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_BODY_OPEN_SCOPE_DRAINS_CONTROLLER_READY,
+        );
+        self.run_bridge_body.run(&run_body_scope)
+    }
+}
+
+struct QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCloseAfterAdapter<'body, F> {
+    run_bridge_body: &'body mut F,
+}
+
+impl<'body, F>
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCloseAfterAdapter<'body, F>
+{
+    fn new(run_bridge_body: &'body mut F) -> Self {
+        Self { run_bridge_body }
+    }
+}
+
+impl<'a, 'body, F> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCloseAfter<'a>
+    for QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCloseAfterAdapter<'body, F>
+where
+    F: DenseApplySequenceBridgeLoopRunBody,
+{
+    fn run(
+        self,
+        frame: &QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame<'a>,
+    ) -> Result<()> {
+        let run_body_scope = DenseApplySequenceBridgeLoopRunBodyScope::new(
+            frame,
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_BODY_CLOSE_AFTER_SCOPE_DRAINS_CONTROLLER_READY,
+        );
+        self.run_bridge_body.run(&run_body_scope)
+    }
+}
+
+struct DenseApplySequenceBridgeLoopCheckpointDrainStep {
+    before_checkpoint:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointDrainBeforeCheckpointState,
+}
+
+impl DenseApplySequenceBridgeLoopCheckpointDrainStep {
+    fn from_before_checkpoint_state(
+        before_checkpoint:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointDrainBeforeCheckpointState,
+    ) -> Self {
+        Self { before_checkpoint }
+    }
+}
+
+impl DenseApplySequenceBridgeLoopCheckpointContext
+    for DenseApplySequenceBridgeLoopCheckpointDrainStep
+{
+    fn is_before_checkpoint(&self) -> bool {
+        self.before_checkpoint.enabled()
+    }
+}
+
+struct DenseApplySequenceBridgeLoopCheckpointDrainContextAdapter<'drain> {
+    dispatch_checkpoint_gate_ready_drain_step:
+        &'drain mut dyn DenseApplySequenceBridgeLoopCheckpointDrain,
+}
+
+impl<'drain> DenseApplySequenceBridgeLoopCheckpointDrainContextAdapter<'drain> {
+    fn new(
+        dispatch_checkpoint_gate_ready_drain_step:
+            &'drain mut dyn DenseApplySequenceBridgeLoopCheckpointDrain,
+    ) -> Self {
+        Self {
+            dispatch_checkpoint_gate_ready_drain_step,
+        }
+    }
+}
+
+impl<'drain>
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyPreCheckpointControllerDrain
+    for DenseApplySequenceBridgeLoopCheckpointDrainContextAdapter<'drain>
+{
+    fn run(
+        &mut self,
+        before_checkpoint:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointDrainBeforeCheckpointState,
+    ) -> Result<()> {
+        let checkpoint_context =
+            DenseApplySequenceBridgeLoopCheckpointDrainStep::from_before_checkpoint_state(
+                before_checkpoint,
+            );
+        self.dispatch_checkpoint_gate_ready_drain_step
+            .run(&checkpoint_context)
+    }
+}
+
+struct DenseApplySequenceBridgeLoopRunBodyScope<'frame, 'a> {
+    frame: &'frame QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame<'a>,
+    open_controller_ready_drain:
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainDecisionState,
+}
+
+impl<'frame, 'a> DenseApplySequenceBridgeLoopRunBodyScope<'frame, 'a> {
+    fn new(
+        frame: &'frame QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame<'a>,
+        open_controller_ready_drain:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainDecisionState,
+    ) -> Self {
+        Self {
+            frame,
+            open_controller_ready_drain,
+        }
+    }
+
+    fn phase_executor_next_checkpoint_gate_ready_pre_checkpoint_controller_drain_steps(
+        &self,
+        dispatch_checkpoint_gate_ready_drain_step: &mut dyn QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyPreCheckpointControllerDrain,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState> {
+        self.frame
+            .phase_executor_next_checkpoint_gate_ready_pre_checkpoint_controller_drain_steps(
+                dispatch_checkpoint_gate_ready_drain_step,
+            )
+    }
+
+    fn next_checkpoint_gate_ready(
+        &self,
+        dispatch_checkpoint_gate_ready_drain_step: &mut dyn DenseApplySequenceBridgeLoopCheckpointDrain,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState> {
+        let mut checkpoint_gate_ready_pre_checkpoint_controller_drain_step =
+            Self::checkpoint_drain_context_adapter(dispatch_checkpoint_gate_ready_drain_step);
+        self.phase_executor_next_checkpoint_gate_ready_pre_checkpoint_controller_drain_steps(
+            &mut checkpoint_gate_ready_pre_checkpoint_controller_drain_step,
+        )
+    }
+
+    fn checkpoint_drain_context_adapter<'drain>(
+        dispatch_checkpoint_gate_ready_drain_step:
+            &'drain mut dyn DenseApplySequenceBridgeLoopCheckpointDrain,
+    ) -> DenseApplySequenceBridgeLoopCheckpointDrainContextAdapter<'drain> {
+        DenseApplySequenceBridgeLoopCheckpointDrainContextAdapter::new(
+            dispatch_checkpoint_gate_ready_drain_step,
+        )
+    }
+
+    fn drain_open_controller_ready(
+        &self,
+        open_controller_ready_drain_step: &mut dyn DenseApplySequenceBridgeLoopOpenControllerReadyDrain,
+    ) -> Result<
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyControllerReadyDrainResultState,
+    > {
+        if self.open_controller_ready_drain.enabled() {
+            open_controller_ready_drain_step.run()?;
+            Ok(QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_BODY_OPEN_CONTROLLER_READY_DRAIN_PERFORMED)
+        } else {
+            Ok(QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_BODY_OPEN_CONTROLLER_READY_DRAIN_SKIPPED)
+        }
+    }
+}
+
+impl DenseApplySequenceBridgeLoopRunBodyContext
+    for DenseApplySequenceBridgeLoopRunBodyScope<'_, '_>
+{
+    fn drain_open_controller_ready(
+        &self,
+        open_controller_ready_drain_step: &mut dyn DenseApplySequenceBridgeLoopOpenControllerReadyDrain,
+    ) -> Result<bool> {
+        Ok(
+            DenseApplySequenceBridgeLoopRunBodyScope::drain_open_controller_ready(
+                self,
+                open_controller_ready_drain_step,
+            )?
+            .enabled(),
+        )
+    }
+
+    fn next_checkpoint_gate_ready(
+        &self,
+        dispatch_checkpoint_gate_ready_drain_step:
+            &mut dyn DenseApplySequenceBridgeLoopCheckpointDrain,
+    ) -> Result<bool> {
+        Ok(
+            DenseApplySequenceBridgeLoopRunBodyScope::next_checkpoint_gate_ready(
+                self,
+                dispatch_checkpoint_gate_ready_drain_step,
+            )?
+            .ready(),
+        )
+    }
+}
+
+pub(crate) fn qwen_resident_layer_runner_dense_apply_sequence_bridge_loop_run_from_plan_ready_flags<
+    F,
+>(
+    run_gate_stage_ready: bool,
+    run_gate_output_rank_count: usize,
+    run_gate_expected_rank_count: usize,
+    checkpoint_gate_plan_ready_rows: [(bool, bool, bool, bool);
+        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT],
+    run_bridge_body: F,
+) -> Result<()>
+where
+    F: DenseApplySequenceBridgeLoopRunBody,
+{
+    qwen_resident_layer_runner_dense_apply_sequence_bridge_loop_with_ready_phase_executor_run_body_from_plan_ready(
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPlanReady::from_flags(
+            run_gate_stage_ready,
+            run_gate_output_rank_count,
+            run_gate_expected_rank_count,
+            checkpoint_gate_plan_ready_rows,
+        ),
+        run_bridge_body,
+    )
+}
+
+fn qwen_resident_layer_runner_dense_apply_sequence_bridge_loop_with_ready_phase_executor_run_body_from_plan_ready<
+    F,
+>(
+    bridge_plan_ready: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPlanReady,
+    run_bridge_body: F,
+) -> Result<()>
+where
+    F: DenseApplySequenceBridgeLoopRunBody,
+{
+    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame::<'static>::with_ready_phase_executor_run_body_from_bridge_plan_ready(
+        bridge_plan_ready,
+        run_bridge_body,
+    )
+}
+
+impl<'a> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopFrame<'a> {
+    fn new(
+        tables: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTableView<'a>,
+        run_gate_plan_ready: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanReady,
+    ) -> Self {
+        let runtime_state =
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRuntimeState::from_table_view(
+                &tables,
+            );
+        let run_body_plan =
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyPlan::from_table_view(
+                &tables,
+            );
+        Self {
+            run_gate_plan_ready,
+            runtime_state,
+            run_body_plan,
+            tables,
+        }
+    }
+
+    fn from_checkpoint_gate_readiness_rows(
+        run_gate_plan_ready: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanReady,
+        checkpoint_gate_readiness_rows:
+            [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness;
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT],
+    ) -> Self {
+        Self::new(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopTableView::from_static_bridge_tables(
+                checkpoint_gate_readiness_rows,
+            ),
+            run_gate_plan_ready,
+        )
+    }
+
+    fn from_bridge_plan_ready(
+        bridge_plan_ready: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPlanReady,
+    ) -> Result<Self> {
+        Ok(Self::from_checkpoint_gate_readiness_rows(
+            bridge_plan_ready.run_gate_plan_ready,
+            Self::checkpoint_gate_readiness_rows_from_static_gate_table(
+                bridge_plan_ready
+                    .checkpoint_gate_plan_ready_rows
+                    .into_rows(),
+            )?,
+        ))
+    }
+
+    fn with_ready_phase_executor_run_body_from_bridge_plan_ready<F>(
+        bridge_plan_ready: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPlanReady,
+        run_bridge_body: F,
+    ) -> Result<()>
+    where
+        F: DenseApplySequenceBridgeLoopRunBody,
+    {
+        let bridge_loop_frame = Self::from_bridge_plan_ready(bridge_plan_ready)?;
+        bridge_loop_frame.with_ready_phase_executor_run_body(run_bridge_body)
+    }
+
+    fn checkpoint_gate_readiness_rows_from_static_gate_table(
+        checkpoint_gate_plan_ready_rows:
+            [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady;
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT],
+    ) -> Result<
+        [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness;
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT],
+    > {
+        Self::checkpoint_gate_readiness_rows_from_plan_ready(
+            &QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATES,
+            checkpoint_gate_plan_ready_rows,
+        )
+    }
+
+    fn checkpoint_gate_readiness_rows_from_plan_ready(
+        bridge_loop_gates: &[QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate],
+        checkpoint_gate_plan_ready_rows:
+            [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady;
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT],
+    ) -> Result<
+        [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness;
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT],
+    > {
+        let checkpoint_gate_descriptors =
+            Self::checkpoint_gate_descriptors_from_gate_table(bridge_loop_gates)?;
+        Ok([
+            Self::checkpoint_gate_readiness_row_from_plan_ready(
+                checkpoint_gate_descriptors[0],
+                checkpoint_gate_plan_ready_rows[0],
+            ),
+            Self::checkpoint_gate_readiness_row_from_plan_ready(
+                checkpoint_gate_descriptors[1],
+                checkpoint_gate_plan_ready_rows[1],
+            ),
+        ])
+    }
+
+    fn checkpoint_gate_descriptors_from_gate_table(
+        bridge_loop_gates: &[QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate],
+    ) -> Result<
+        [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate;
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT],
+    > {
+        let mut checkpoint_gate_descriptors = Vec::new();
+        for bridge_loop_gate in bridge_loop_gates.iter().copied() {
+            let bridge_loop_gate_controls_checkpoint_invocation_state =
+                bridge_loop_gate.controls_checkpoint_invocation_state();
+            let bridge_loop_gate_controls_checkpoint_invocation =
+                bridge_loop_gate_controls_checkpoint_invocation_state.controls();
+            if !bridge_loop_gate_controls_checkpoint_invocation {
+                continue;
+            }
+            let bridge_loop_gate_controls_bridge_run_context_state =
+                bridge_loop_gate.controls_bridge_run_context_state();
+            let bridge_loop_gate_controls_bridge_run_context =
+                bridge_loop_gate_controls_bridge_run_context_state.controls();
+            if bridge_loop_gate_controls_bridge_run_context {
+                anyhow::bail!(
+                    "resident dense apply sequence bridge checkpoint gate {} also controls bridge run context",
+                    bridge_loop_gate.gate_index()
+                );
+            }
+            checkpoint_gate_descriptors.push(bridge_loop_gate);
+        }
+        checkpoint_gate_descriptors.try_into().map_err(
+            |checkpoint_gate_descriptor_rows: Vec<
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+            >| {
+                anyhow::anyhow!(
+                    "resident dense apply sequence bridge gate table checkpoint gate count {} does not match readiness row count {}",
+                    checkpoint_gate_descriptor_rows.len(),
+                    QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROW_COUNT
+                )
+            },
+        )
+    }
+
+    fn checkpoint_gate_readiness_row_from_plan_ready(
+        bridge_checkpoint_gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+        checkpoint_gate_plan_ready:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness {
+        Self::checkpoint_gate_readiness_row_from_descriptor(
+            bridge_checkpoint_gate_descriptor,
+            checkpoint_gate_plan_ready,
+        )
+    }
+
+    fn checkpoint_gate_readiness_row_from_descriptor(
+        bridge_checkpoint_gate_descriptor: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate,
+        checkpoint_gate_plan_ready:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGatePlanReady,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness {
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness::new(
+            bridge_checkpoint_gate_descriptor,
+            checkpoint_gate_plan_ready,
+        )
+    }
+
+    fn gate_count_state(&self) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateRowCount {
+        self.tables.gate_count_state()
+    }
+
+    fn phase_count_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseRowCount {
+        self.tables.phase_count_state()
+    }
+
+    fn checkpoint_gate_readiness_row_count_state(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowCount {
+        self.tables.checkpoint_gate_readiness_row_count_state()
+    }
+
+    fn gates(&self) -> &'a [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate] {
+        self.tables.gates()
+    }
+
+    fn phases(&self) -> &'a [QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase] {
+        self.tables.phases()
+    }
+
+    fn checkpoint_gate_readiness_rows(
+        &self,
+    ) -> &[QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness] {
+        self.tables.checkpoint_gate_readiness_rows()
+    }
+
+    fn controller_state(&self) -> &QwenResidentLayerRunnerDenseApplySequenceLoopControllerState {
+        self.runtime_state.controller_state()
+    }
+
+    fn controller_ready_drain_state(
+        &self,
+    ) -> &QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainState {
+        self.runtime_state.controller_ready_drain_state()
+    }
+
+    fn cursor_state(&self) -> &QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCursorState {
+        self.runtime_state.cursor_state()
+    }
+
+    fn phase_executor_state(
+        &self,
+    ) -> &QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorState {
+        self.runtime_state.phase_executor_state()
+    }
+
+    fn run_body_plan(
+        &self,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyPlan {
+        self.run_body_plan
+    }
+
+    fn gate_table_stage(&self) -> Result<()> {
+        let bridge_gate_count_state = self.gate_count_state();
+        let bridge_gate_count = bridge_gate_count_state.count();
+        let bridge_phase_count_state = self.phase_count_state();
+        let bridge_phase_count = bridge_phase_count_state.count();
+        println!("  resident_layer_runner_dense_apply_sequence_bridge_loop_gate_table_stage:");
+        println!("    source: main_dense_apply_sequence_bridge_loop_gate_table");
+        println!("    sequence_loop_bridge_gate_count: {bridge_gate_count}");
+        println!("    sequence_loop_bridge_phase_count: {bridge_phase_count}");
+        println!(
+            "    bridge_gate_table_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_USED.used()
+        );
+        println!(
+            "    bridge_gate_table_bound_to_phase_table: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_BOUND_TO_PHASE_TABLE
+                .satisfied()
+        );
+        println!(
+            "    bridge_gate_table_rows_cover_all_phase_rows: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_ROWS_COVER_ALL_PHASE_ROWS
+                .satisfied()
+        );
+        println!(
+            "    bridge_gate_table_represents_all_bridge_gates: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_REPRESENTS_ALL_BRIDGE_GATES
+                .satisfied()
+        );
+        println!(
+            "    bridge_gate_table_run_gate_separate_from_checkpoint_gates: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_RUN_GATE_SEPARATE_FROM_CHECKPOINT_GATES
+                .separates_run_gate_from_checkpoint_gates()
+        );
+        println!(
+            "    bridge_gates_remain_interleaved: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATES_REMAIN_INTERLEAVED
+                .remain_interleaved()
+        );
+        println!(
+            "    sequence_loop_started: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SEQUENCE_LOOP_STARTED
+                .started()
+        );
+        println!(
+            "    execution_path_changed: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_EXECUTION_PATH_CHANGED
+                .changed()
+        );
+        println!(
+            "    hip_graph_capture_started: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_HIP_GRAPH_CAPTURE_STARTED
+                .started()
+        );
+        Ok(())
+    }
+
+    fn run_gate_stage(
+        &self,
+        bridge_loop_run_gate: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGate,
+    ) -> Result<()> {
+        let bridge_run_gate_plan_ready = bridge_loop_run_gate.run_gate_plan_ready();
+        let bridge_run_gate_output_rank_count_state =
+            bridge_run_gate_plan_ready.output_rank_count_state();
+        let bridge_run_gate_output_rank_count = bridge_run_gate_output_rank_count_state.count();
+        let bridge_run_gate_expected_rank_count_state =
+            bridge_run_gate_plan_ready.expected_rank_count_state();
+        let bridge_run_gate_expected_rank_count = bridge_run_gate_expected_rank_count_state.count();
+        println!("  resident_layer_runner_dense_apply_sequence_bridge_loop_run_gate_stage:");
+        println!("    source: main_dense_apply_sequence_bridge_loop_run_gate");
+        println!(
+            "    sequence_loop_bridge_run_gate_index: {}",
+            bridge_loop_run_gate.gate_descriptor.gate_index()
+        );
+        println!(
+            "    sequence_loop_bridge_run_gate_role: {}",
+            bridge_loop_run_gate.gate_descriptor.gate_role
+        );
+        println!(
+            "    sequence_loop_bridge_run_gate_phase_index: {}",
+            bridge_loop_run_gate.gate_descriptor.phase_index()
+        );
+        println!(
+            "    sequence_loop_bridge_run_gate_phase_role: {}",
+            bridge_loop_run_gate.gate_descriptor.phase_role
+        );
+        println!(
+            "    sequence_loop_bridge_run_gate_stage_ready: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_STAGE_READY
+                .satisfied()
+        );
+        println!(
+            "    sequence_loop_bridge_run_gate_output_rank_count: {}",
+            bridge_run_gate_output_rank_count
+        );
+        println!(
+            "    sequence_loop_bridge_run_gate_expected_rank_count: {}",
+            bridge_run_gate_expected_rank_count
+        );
+        println!(
+            "    sequence_loop_bridge_run_gate_output_ranks_valid: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_OUTPUT_RANKS_VALID
+                .satisfied()
+        );
+        println!(
+            "    bridge_run_gate_descriptor_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_DESCRIPTOR_USED
+                .satisfied()
+        );
+        println!(
+            "    bridge_run_gate_descriptor_controls_bridge_context: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_DESCRIPTOR_CONTROLS_BRIDGE_CONTEXT
+                .satisfied()
+        );
+        println!(
+            "    bridge_gate_table_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_USED.used()
+        );
+        println!(
+            "    bridge_gate_table_bound_to_phase_table: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_BOUND_TO_PHASE_TABLE
+                .satisfied()
+        );
+        println!(
+            "    bridge_gate_table_represents_all_bridge_gates: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_REPRESENTS_ALL_BRIDGE_GATES
+                .satisfied()
+        );
+        println!(
+            "    bridge_phase_executor_enclosing_run_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_ENCLOSING_RUN_USED
+                .used()
+        );
+        println!(
+            "    bridge_gates_remain_interleaved: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATES_REMAIN_INTERLEAVED
+                .remain_interleaved()
+        );
+        println!(
+            "    sequence_loop_started: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SEQUENCE_LOOP_STARTED
+                .started()
+        );
+        println!(
+            "    execution_path_changed: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_EXECUTION_PATH_CHANGED
+                .changed()
+        );
+        println!(
+            "    hip_graph_capture_started: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_HIP_GRAPH_CAPTURE_STARTED
+                .started()
+        );
+        Ok(())
+    }
+
+    fn checkpoint_gate_readiness_table_stage(&self) -> Result<()> {
+        let checkpoint_gate_readiness_row_count_state =
+            self.checkpoint_gate_readiness_row_count_state();
+        let checkpoint_gate_readiness_row_count = checkpoint_gate_readiness_row_count_state.count();
+        let checkpoint_gate_indices = self
+            .checkpoint_gate_readiness_rows()
+            .iter()
+            .map(|row| row.gate_descriptor.gate_index())
+            .collect::<Vec<_>>();
+        println!("  resident_layer_runner_dense_apply_sequence_bridge_loop_checkpoint_gate_readiness_table_stage:");
+        println!(
+            "    source: main_dense_apply_sequence_bridge_loop_checkpoint_gate_readiness_table"
+        );
+        println!(
+            "    sequence_loop_bridge_checkpoint_gate_readiness_row_count: {checkpoint_gate_readiness_row_count}"
+        );
+        println!(
+            "    sequence_loop_bridge_checkpoint_gate_indices: {:?}",
+            checkpoint_gate_indices
+        );
+        println!(
+            "    bridge_checkpoint_gate_readiness_table_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READINESS_TABLE_USED
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_construction_table_driven: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_CONSTRUCTION_TABLE_DRIVEN
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_readiness_cursor_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READINESS_CURSOR_USED
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_rows_derive_gate_descriptors: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_ROWS_DERIVE_GATE_DESCRIPTORS
+                .satisfied()
+        );
+        println!(
+            "    bridge_phase_executor_indexed_checkpoint_gate_helper_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_HELPER_INDEXED
+                .indexed_checkpoint_gate_helper_used()
+        );
+        println!(
+            "    bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_SPECIFIC_CHECKPOINT_GATE_HELPERS_REMOVED
+                .phase_specific_checkpoint_gate_helpers_removed()
+        );
+        println!(
+            "    bridge_gates_remain_interleaved: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATES_REMAIN_INTERLEAVED
+                .remain_interleaved()
+        );
+        println!(
+            "    sequence_loop_started: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SEQUENCE_LOOP_STARTED
+                .started()
+        );
+        println!(
+            "    execution_path_changed: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_EXECUTION_PATH_CHANGED
+                .changed()
+        );
+        println!(
+            "    hip_graph_capture_started: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_HIP_GRAPH_CAPTURE_STARTED
+                .started()
+        );
+        Ok(())
+    }
+
+    fn phase_executor_begin_state(
+        &self,
+        phase_executor_begin_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginState,
+    ) -> Result<()> {
+        let bridge_phase_executor_run_body_plan_state =
+            phase_executor_begin_state.bridge_phase_executor_run_body_plan_state();
+        let bridge_phase_executor_run_body_plan =
+            bridge_phase_executor_run_body_plan_state.run_body_plan();
+        let bridge_phase_executor_state = self.phase_executor_state();
+        let bridge_phase_executor_active_state = bridge_phase_executor_state.active_state();
+        if bridge_phase_executor_active_state.active() {
+            anyhow::bail!(
+                "resident dense apply sequence bridge phase executor entered while already active"
+            );
+        }
+        let bridge_phase_executor_entry_count_state =
+            bridge_phase_executor_state.entry_count_state();
+        let bridge_phase_executor_entry_count = bridge_phase_executor_entry_count_state.count();
+        if bridge_phase_executor_entry_count
+            != QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_IDLE_ENTRY_COUNT
+                .count()
+        {
+            anyhow::bail!(
+                "resident dense apply sequence bridge phase executor entry count {} before begin",
+                bridge_phase_executor_entry_count
+            );
+        }
+        bridge_phase_executor_state.set_active(
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_BEGIN_ACTIVE_STATE,
+        );
+        bridge_phase_executor_state.set_entry_count(
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_ACTIVE_ENTRY_COUNT,
+        );
+        println!(
+            "  resident_layer_runner_dense_apply_sequence_bridge_loop_phase_executor_run_stage:"
+        );
+        println!("    source: main_dense_apply_sequence_bridge_loop_phase_executor_begin");
+        let bridge_phase_executor_phase_count_state =
+            bridge_phase_executor_run_body_plan.phase_count_state();
+        let bridge_phase_executor_phase_count = bridge_phase_executor_phase_count_state.count();
+        println!(
+            "    sequence_loop_bridge_phase_count: {}",
+            bridge_phase_executor_phase_count
+        );
+        let bridge_phase_executor_enclosing_run_used_state =
+            bridge_phase_executor_run_body_plan.enclosing_run_used_state();
+        let bridge_phase_executor_enclosing_run_used =
+            bridge_phase_executor_enclosing_run_used_state.used();
+        println!(
+            "    bridge_phase_executor_enclosing_run_used: {}",
+            bridge_phase_executor_enclosing_run_used
+        );
+        let bridge_phase_executor_single_run_entry_state =
+            bridge_phase_executor_run_body_plan.single_run_entry_state();
+        let bridge_phase_executor_single_run_entry =
+            bridge_phase_executor_single_run_entry_state.satisfied();
+        println!(
+            "    bridge_phase_executor_single_run_entry: {}",
+            bridge_phase_executor_single_run_entry
+        );
+        let bridge_phase_executor_run_body_metadata_used_state =
+            bridge_phase_executor_run_body_plan.run_body_metadata_used_state();
+        let bridge_phase_executor_run_body_metadata_used =
+            bridge_phase_executor_run_body_metadata_used_state.used();
+        println!(
+            "    bridge_phase_executor_run_body_metadata_used: {}",
+            bridge_phase_executor_run_body_metadata_used
+        );
+        let bridge_phase_executor_begin_phase_count_from_run_body_plan_state =
+            bridge_phase_executor_run_body_plan.begin_phase_count_from_run_body_plan_state();
+        let bridge_phase_executor_begin_phase_count_from_run_body_plan =
+            bridge_phase_executor_begin_phase_count_from_run_body_plan_state
+                .sourced_from_run_body_plan();
+        println!(
+            "    bridge_phase_executor_begin_phase_count_from_run_body_plan: {}",
+            bridge_phase_executor_begin_phase_count_from_run_body_plan
+        );
+        let bridge_phase_executor_main_entry_callsite_count_state =
+            bridge_phase_executor_run_body_plan.main_entry_callsite_count_state();
+        let bridge_phase_executor_main_entry_callsite_count =
+            bridge_phase_executor_main_entry_callsite_count_state.count();
+        println!(
+            "    bridge_phase_executor_main_entry_callsite_count: {}",
+            bridge_phase_executor_main_entry_callsite_count
+        );
+        let bridge_phase_executor_phase0_checkpoint_body_owned_by_begin_state =
+            bridge_phase_executor_run_body_plan.phase0_checkpoint_body_owned_by_begin_state();
+        let bridge_phase_executor_phase0_checkpoint_body_owned_by_begin =
+            bridge_phase_executor_phase0_checkpoint_body_owned_by_begin_state.owned();
+        println!(
+            "    bridge_phase_executor_phase0_checkpoint_body_owned_by_begin: {}",
+            bridge_phase_executor_phase0_checkpoint_body_owned_by_begin
+        );
+        let bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready_state =
+            bridge_phase_executor_run_body_plan.phase1_checkpoint_body_owned_by_gate_ready_state();
+        let bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready =
+            bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready_state.owned();
+        println!(
+            "    bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready: {}",
+            bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready
+        );
+        let bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready_state =
+            bridge_phase_executor_run_body_plan.phase2_checkpoint_body_owned_by_gate_ready_state();
+        let bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready =
+            bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready_state.owned();
+        println!(
+            "    bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready: {}",
+            bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready
+        );
+        let bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor_state =
+            bridge_phase_executor_run_body_plan
+                .all_checkpoint_bodies_owned_by_phase_executor_state();
+        let bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor =
+            bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor_state
+                .all_checkpoint_bodies_owned_by_phase_executor();
+        println!(
+            "    bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor: {}",
+            bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor
+        );
+        let bridge_phase_executor_indexed_checkpoint_gate_helper_state =
+            bridge_phase_executor_run_body_plan.checkpoint_gate_helper_indexed_state();
+        let bridge_phase_executor_indexed_checkpoint_gate_helper =
+            bridge_phase_executor_indexed_checkpoint_gate_helper_state
+                .indexed_checkpoint_gate_helper_used();
+        println!(
+            "    bridge_phase_executor_indexed_checkpoint_gate_helper_used: {}",
+            bridge_phase_executor_indexed_checkpoint_gate_helper
+        );
+        let bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed_state =
+            bridge_phase_executor_run_body_plan
+                .phase_specific_checkpoint_gate_helpers_removed_state();
+        let bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed =
+            bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed_state
+                .phase_specific_checkpoint_gate_helpers_removed();
+        println!(
+            "    bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed: {}",
+            bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed
+        );
+        let bridge_phase_executor_phase0_checkpoint_invocation_moved_into_begin_state =
+            bridge_phase_executor_run_body_plan
+                .phase0_checkpoint_invocation_moved_into_begin_state();
+        let bridge_phase_executor_phase0_checkpoint_invocation_moved_into_begin =
+            bridge_phase_executor_phase0_checkpoint_invocation_moved_into_begin_state
+                .moved_into_begin();
+        println!(
+            "    bridge_phase_executor_phase0_checkpoint_invocation_moved_into_begin: {}",
+            bridge_phase_executor_phase0_checkpoint_invocation_moved_into_begin
+        );
+        let bridge_phase_executor_remaining_interleaved_checkpoint_count_state =
+            bridge_phase_executor_run_body_plan.remaining_interleaved_checkpoint_count_state();
+        let bridge_phase_executor_remaining_interleaved_checkpoint_count =
+            bridge_phase_executor_remaining_interleaved_checkpoint_count_state.count();
+        println!(
+            "    bridge_phase_executor_remaining_interleaved_checkpoint_count: {}",
+            bridge_phase_executor_remaining_interleaved_checkpoint_count
+        );
+        let bridge_phase_executor_checkpoint_invocations_remain_interleaved_state =
+            bridge_phase_executor_run_body_plan.checkpoint_invocations_remain_interleaved_state();
+        let bridge_phase_executor_checkpoint_invocations_remain_interleaved =
+            bridge_phase_executor_checkpoint_invocations_remain_interleaved_state
+                .remain_interleaved();
+        println!(
+            "    bridge_phase_executor_checkpoint_invocations_remain_interleaved: {}",
+            bridge_phase_executor_checkpoint_invocations_remain_interleaved
+        );
+        let bridge_gates_remain_interleaved_state =
+            bridge_phase_executor_run_body_plan.gates_remain_interleaved_state();
+        let bridge_gates_remain_interleaved =
+            bridge_gates_remain_interleaved_state.remain_interleaved();
+        println!(
+            "    bridge_gates_remain_interleaved: {}",
+            bridge_gates_remain_interleaved
+        );
+        let sequence_loop_started_state =
+            bridge_phase_executor_run_body_plan.sequence_loop_started_state();
+        let sequence_loop_started = sequence_loop_started_state.started();
+        println!("    sequence_loop_started: {}", sequence_loop_started);
+        let execution_path_changed_state =
+            bridge_phase_executor_run_body_plan.execution_path_changed_state();
+        let execution_path_changed = execution_path_changed_state.changed();
+        println!("    execution_path_changed: {}", execution_path_changed);
+        let hip_graph_capture_started_state =
+            bridge_phase_executor_run_body_plan.hip_graph_capture_started_state();
+        let hip_graph_capture_started = hip_graph_capture_started_state.started();
+        println!(
+            "    hip_graph_capture_started: {}",
+            hip_graph_capture_started
+        );
+        Ok(())
+    }
+
+    fn phase_executor_begin_checkpoint_invocation(
+        &self,
+        phase_executor_begin_checkpoint_invocation_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginCheckpointInvocationState,
+    ) -> Result<()> {
+        let bridge_phase_executor_run_body_plan_state =
+            phase_executor_begin_checkpoint_invocation_state
+                .bridge_phase_executor_run_body_plan_state();
+        self.phase_executor_begin_state(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginState::from_run_body_plan_state(
+                bridge_phase_executor_run_body_plan_state,
+            ),
+        )?;
+        self.phase_executor_state().set_checkpoint_invocation_source(
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_RUNTIME_BEGIN_CHECKPOINT_INVOCATION_SOURCE,
+        );
+        Ok(())
+    }
+
+    fn phase_executor_checkpoint_gate_ready_invocation(&self) {
+        self.phase_executor_state().set_checkpoint_invocation_source(
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_RUNTIME_GATE_READY_CHECKPOINT_INVOCATION_SOURCE,
+        );
+    }
+
+    fn phase_executor_checkpoint_invocation_complete(&self) {
+        self.phase_executor_state()
+            .reset_checkpoint_invocation_source();
+    }
+
+    fn phase_descriptor_from_run_body_plan(
+        &self,
+        phase_descriptor_from_run_body_plan_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseDescriptorFromRunBodyPlanState,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase> {
+        let bridge_loop_phase_index_state =
+            phase_descriptor_from_run_body_plan_state.bridge_loop_phase_index_state();
+        let bridge_loop_phase_index = bridge_loop_phase_index_state.index();
+        let bridge_phase_executor_run_body_plan =
+            phase_descriptor_from_run_body_plan_state.bridge_phase_executor_run_body_plan();
+        let bridge_loop_phase_count_state = bridge_phase_executor_run_body_plan.phase_count_state();
+        let bridge_loop_phase_count = bridge_loop_phase_count_state.count();
+        self.phases()
+            .get(bridge_loop_phase_index)
+            .copied()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "resident dense apply sequence bridge loop phase {} outside phase count {}",
+                    bridge_loop_phase_index,
+                    bridge_loop_phase_count
+                )
+            })
+    }
+
+    fn phase_descriptor_from_gate_descriptor(
+        &self,
+        phase_descriptor_from_gate_descriptor_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseDescriptorFromGateDescriptorState,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase> {
+        let bridge_gate_index = phase_descriptor_from_gate_descriptor_state.bridge_gate_index();
+        let bridge_loop_gate = phase_descriptor_from_gate_descriptor_state.bridge_loop_gate();
+        let bridge_loop_phase_count_state = self.phase_count_state();
+        let bridge_loop_phase_count = bridge_loop_phase_count_state.count();
+        self.phases()
+            .get(bridge_loop_gate.phase_index())
+            .copied()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "resident dense apply sequence bridge gate {} phase {} outside phase count {}",
+                    bridge_gate_index,
+                    bridge_loop_gate.phase_index(),
+                    bridge_loop_phase_count
+                )
+            })
+    }
+
+    fn phase_descriptor_from_checkpoint_gate_descriptor(
+        &self,
+        phase_descriptor_from_checkpoint_gate_descriptor_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseDescriptorFromCheckpointGateDescriptorState,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase> {
+        let bridge_checkpoint_gate_descriptor =
+            phase_descriptor_from_checkpoint_gate_descriptor_state
+                .bridge_checkpoint_gate_descriptor();
+        let bridge_loop_phase_count_state = self.phase_count_state();
+        let bridge_loop_phase_count = bridge_loop_phase_count_state.count();
+        self.phases()
+            .get(bridge_checkpoint_gate_descriptor.phase_index())
+            .copied()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "resident dense apply sequence bridge checkpoint gate phase {} outside phase count {}",
+                    bridge_checkpoint_gate_descriptor.phase_index(),
+                    bridge_loop_phase_count
+                )
+            })
+    }
+
+    fn phase_executor_next_checkpoint(
+        &self,
+        phase_executor_next_checkpoint_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorNextCheckpointState,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpoint> {
+        let bridge_phase_executor_run_body_plan_state =
+            phase_executor_next_checkpoint_state.bridge_phase_executor_run_body_plan_state();
+        let bridge_phase_executor_run_body_plan =
+            bridge_phase_executor_run_body_plan_state.run_body_plan();
+        let bridge_loop_cursor_state = self.cursor_state();
+        let bridge_loop_phase_executor_state = self.phase_executor_state();
+        let bridge_loop_phase_executor_active_state =
+            bridge_loop_phase_executor_state.active_state();
+        if !bridge_loop_phase_executor_active_state.active() {
+            anyhow::bail!(
+                "resident dense apply sequence bridge phase executor checkpoint outside active run"
+            );
+        }
+        let bridge_loop_phase_index_state = bridge_loop_cursor_state.phase_index_state();
+        let bridge_loop_phase_index = bridge_loop_phase_index_state.index();
+        let bridge_loop_phase = self.phase_descriptor_from_run_body_plan(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseDescriptorFromRunBodyPlanState::from_parts(
+                bridge_loop_phase_index_state,
+                bridge_phase_executor_run_body_plan,
+            ),
+        )?;
+        if bridge_loop_phase.phase_index() != bridge_loop_phase_index {
+            anyhow::bail!(
+                "resident dense apply sequence bridge loop phase cursor {} found descriptor phase {}",
+                bridge_loop_phase_index,
+                bridge_loop_phase.phase_index()
+            );
+        }
+        let bridge_loop_gate = self.gate_descriptor(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateDescriptorLookupState::from_index(
+                bridge_loop_phase_index,
+            ),
+        )?;
+        if bridge_loop_gate.phase_index() != bridge_loop_phase.phase_index() {
+            anyhow::bail!(
+                "resident dense apply sequence bridge phase {} consumed gate {} for phase {}",
+                bridge_loop_phase_index,
+                bridge_loop_gate.gate_index(),
+                bridge_loop_gate.phase_index()
+            );
+        }
+        if bridge_loop_gate.phase_role != bridge_loop_phase.bridge_role {
+            anyhow::bail!(
+                "resident dense apply sequence bridge phase {} gate phase role {} does not match phase role {}",
+                bridge_loop_phase_index,
+                bridge_loop_gate.phase_role,
+                bridge_loop_phase.bridge_role
+            );
+        }
+        if bridge_loop_phase_index
+            == QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_FIRST_PHASE_INDEX
+        {
+            let bridge_loop_gate_controls_bridge_run_context_state =
+                bridge_loop_gate.controls_bridge_run_context_state();
+            let bridge_loop_gate_controls_bridge_run_context =
+                bridge_loop_gate_controls_bridge_run_context_state.controls();
+            let bridge_loop_gate_controls_checkpoint_invocation_state =
+                bridge_loop_gate.controls_checkpoint_invocation_state();
+            let bridge_loop_gate_controls_checkpoint_invocation =
+                bridge_loop_gate_controls_checkpoint_invocation_state.controls();
+            if !bridge_loop_gate_controls_bridge_run_context
+                || bridge_loop_gate_controls_checkpoint_invocation
+            {
+                anyhow::bail!(
+                    "resident dense apply sequence bridge phase 0 expected run-context gate, got bridge_context={} checkpoint={}",
+                    bridge_loop_gate_controls_bridge_run_context,
+                    bridge_loop_gate_controls_checkpoint_invocation
+                );
+            }
+        } else {
+            let bridge_loop_gate_controls_bridge_run_context_state =
+                bridge_loop_gate.controls_bridge_run_context_state();
+            let bridge_loop_gate_controls_bridge_run_context =
+                bridge_loop_gate_controls_bridge_run_context_state.controls();
+            let bridge_loop_gate_controls_checkpoint_invocation_state =
+                bridge_loop_gate.controls_checkpoint_invocation_state();
+            let bridge_loop_gate_controls_checkpoint_invocation =
+                bridge_loop_gate_controls_checkpoint_invocation_state.controls();
+            if bridge_loop_gate_controls_bridge_run_context
+                || !bridge_loop_gate_controls_checkpoint_invocation
+            {
+                anyhow::bail!(
+                    "resident dense apply sequence bridge phase {} expected checkpoint gate, got bridge_context={} checkpoint={}",
+                    bridge_loop_phase_index,
+                    bridge_loop_gate_controls_bridge_run_context,
+                    bridge_loop_gate_controls_checkpoint_invocation
+                );
+            }
+        }
+        let bridge_phase_executor_checkpoint_invocation_source =
+            bridge_loop_phase_executor_state.checkpoint_invocation_source();
+        let bridge_phase_executor_checkpoint_invocation_owned_state =
+            bridge_phase_executor_checkpoint_invocation_source.owned_by_phase_executor_state();
+        let bridge_phase_executor_checkpoint_invocation_owned =
+            bridge_phase_executor_checkpoint_invocation_owned_state.owned();
+        if !bridge_phase_executor_checkpoint_invocation_owned {
+            anyhow::bail!(
+                "resident dense apply sequence bridge checkpoint invocation source {} outside phase executor ownership",
+                bridge_phase_executor_checkpoint_invocation_source.label()
+            );
+        }
+        bridge_loop_cursor_state.advance_phase_index_from_advance_state(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseCursorAdvanceState::from_cursor_advanced_by(
+                bridge_loop_phase_index_state,
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_CURSOR_ADVANCE_STEP,
+            ),
+        );
+        self.phase_executor_next_checkpoint_stage(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorNextCheckpointStageState::from_parts_state(
+                bridge_loop_phase_index_state,
+                bridge_loop_phase,
+                bridge_loop_gate,
+                bridge_phase_executor_run_body_plan_state,
+                bridge_loop_cursor_state.phase_index_state(),
+                bridge_phase_executor_checkpoint_invocation_source,
+                bridge_loop_phase_executor_state.entry_count_state(),
+            ),
+        )?;
+        Ok(self.phase_executor_checkpoint_from_cursor(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointFromCursorState::from_parts(
+                bridge_loop_phase_index_state,
+                bridge_loop_phase,
+            ),
+        ))
+    }
+
+    fn phase_executor_checkpoint_from_cursor(
+        &self,
+        phase_executor_checkpoint_from_cursor_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointFromCursorState,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpoint {
+        let bridge_loop_phase_index_state =
+            phase_executor_checkpoint_from_cursor_state.bridge_loop_phase_index_state();
+        let bridge_loop_phase = phase_executor_checkpoint_from_cursor_state.bridge_loop_phase();
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpoint::new(
+            bridge_loop_phase_index_state,
+            bridge_loop_phase,
+        )
+    }
+
+    fn phase_executor_next_checkpoint_stage(
+        &self,
+        phase_executor_next_checkpoint_stage_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorNextCheckpointStageState,
+    ) -> Result<()> {
+        let bridge_loop_phase_index_state =
+            phase_executor_next_checkpoint_stage_state.bridge_loop_phase_index_state();
+        let bridge_loop_phase_index = bridge_loop_phase_index_state.index();
+        let bridge_loop_phase = phase_executor_next_checkpoint_stage_state.bridge_loop_phase();
+        let bridge_loop_gate = phase_executor_next_checkpoint_stage_state.bridge_loop_gate();
+        let bridge_phase_executor_run_body_plan_state =
+            phase_executor_next_checkpoint_stage_state.bridge_phase_executor_run_body_plan_state();
+        let bridge_phase_executor_run_body_plan =
+            bridge_phase_executor_run_body_plan_state.run_body_plan();
+        let bridge_loop_phase_cursor_after_advance_state =
+            phase_executor_next_checkpoint_stage_state
+                .bridge_loop_phase_cursor_after_advance_state();
+        let bridge_phase_executor_checkpoint_invocation_source =
+            phase_executor_next_checkpoint_stage_state
+                .bridge_phase_executor_checkpoint_invocation_source();
+        let bridge_phase_executor_run_entry_count_state =
+            phase_executor_next_checkpoint_stage_state
+                .bridge_phase_executor_run_entry_count_state();
+        let bridge_loop_phase_cursor_after_advance =
+            bridge_loop_phase_cursor_after_advance_state.index();
+        let bridge_phase_executor_run_entry_count =
+            bridge_phase_executor_run_entry_count_state.count();
+        let bridge_phase_executor_checkpoint_invocation_inside_begin_state =
+            bridge_phase_executor_checkpoint_invocation_source.inside_begin_state();
+        let bridge_phase_executor_checkpoint_invocation_inside_begin =
+            bridge_phase_executor_checkpoint_invocation_inside_begin_state.inside_source();
+        let bridge_phase_executor_checkpoint_invocation_inside_gate_ready_state =
+            bridge_phase_executor_checkpoint_invocation_source.inside_checkpoint_gate_ready_state();
+        let bridge_phase_executor_checkpoint_invocation_inside_gate_ready =
+            bridge_phase_executor_checkpoint_invocation_inside_gate_ready_state.inside_source();
+        let bridge_loop_phase_count_state = bridge_phase_executor_run_body_plan.phase_count_state();
+        let bridge_loop_phase_count = bridge_loop_phase_count_state.count();
+        println!("  resident_layer_runner_dense_apply_sequence_bridge_loop_phase_executor_stage:");
+        println!(
+            "    source: main_dense_apply_sequence_bridge_loop_phase_executor_next_checkpoint"
+        );
+        println!("    sequence_loop_bridge_phase_index: {bridge_loop_phase_index}");
+        println!("    sequence_loop_bridge_phase_count: {bridge_loop_phase_count}");
+        println!(
+            "    sequence_loop_bridge_phase_role: {}",
+            bridge_loop_phase.bridge_role
+        );
+        println!(
+            "    sequence_loop_bridge_phase_gate_index: {}",
+            bridge_loop_gate.gate_index()
+        );
+        println!(
+            "    sequence_loop_bridge_phase_gate_role: {}",
+            bridge_loop_gate.gate_role
+        );
+        println!(
+            "    sequence_loop_bridge_phase_cursor_after_advance: {bridge_loop_phase_cursor_after_advance}"
+        );
+        let bridge_phase_table_used_state =
+            bridge_phase_executor_run_body_plan.phase_table_used_state();
+        let bridge_phase_table_used = bridge_phase_table_used_state.used();
+        println!("    bridge_phase_table_used: {}", bridge_phase_table_used);
+        let bridge_gate_table_used_state =
+            bridge_phase_executor_run_body_plan.gate_table_used_state();
+        let bridge_gate_table_used = bridge_gate_table_used_state.used();
+        println!("    bridge_gate_table_used: {}", bridge_gate_table_used);
+        let bridge_phase_executor_run_body_metadata_used_state =
+            bridge_phase_executor_run_body_plan.run_body_metadata_used_state();
+        let bridge_phase_executor_run_body_metadata_used =
+            bridge_phase_executor_run_body_metadata_used_state.used();
+        println!(
+            "    bridge_phase_executor_run_body_metadata_used: {}",
+            bridge_phase_executor_run_body_metadata_used
+        );
+        let bridge_phase_executor_checkpoint_phase_count_from_run_body_plan_state =
+            bridge_phase_executor_run_body_plan.checkpoint_phase_count_from_run_body_plan_state();
+        let bridge_phase_executor_checkpoint_phase_count_from_run_body_plan =
+            bridge_phase_executor_checkpoint_phase_count_from_run_body_plan_state
+                .sourced_from_run_body_plan();
+        println!(
+            "    bridge_phase_executor_checkpoint_phase_count_from_run_body_plan: {}",
+            bridge_phase_executor_checkpoint_phase_count_from_run_body_plan
+        );
+        let bridge_phase_executor_consumed_matching_gate_descriptor_state =
+            bridge_phase_executor_run_body_plan.consumed_matching_gate_descriptor_state();
+        let bridge_phase_executor_consumed_matching_gate_descriptor =
+            bridge_phase_executor_consumed_matching_gate_descriptor_state.satisfied();
+        println!(
+            "    bridge_phase_executor_consumed_matching_gate_descriptor: {}",
+            bridge_phase_executor_consumed_matching_gate_descriptor
+        );
+        let bridge_phase_executor_gate_descriptor_bound_to_phase_table_state =
+            bridge_phase_executor_run_body_plan.gate_descriptor_bound_to_phase_table_state();
+        let bridge_phase_executor_gate_descriptor_bound_to_phase_table =
+            bridge_phase_executor_gate_descriptor_bound_to_phase_table_state.satisfied();
+        println!(
+            "    bridge_phase_executor_gate_descriptor_bound_to_phase_table: {}",
+            bridge_phase_executor_gate_descriptor_bound_to_phase_table
+        );
+        println!(
+            "    bridge_phase_executor_checkpoint_invocation_inside_begin: {bridge_phase_executor_checkpoint_invocation_inside_begin}"
+        );
+        println!(
+            "    bridge_phase_executor_checkpoint_invocation_inside_gate_ready: {bridge_phase_executor_checkpoint_invocation_inside_gate_ready}"
+        );
+        println!(
+            "    bridge_phase_executor_checkpoint_invocation_source: {}",
+            bridge_phase_executor_checkpoint_invocation_source.label()
+        );
+        println!(
+            "    bridge_phase_executor_checkpoint_gate_helper_indexed: {bridge_phase_executor_checkpoint_invocation_inside_gate_ready}"
+        );
+        println!(
+            "    bridge_phase_executor_gate_controls_bridge_context: {}",
+            bridge_loop_gate
+                .controls_bridge_run_context_state()
+                .controls()
+        );
+        println!(
+            "    bridge_phase_executor_gate_controls_checkpoint_invocation: {}",
+            bridge_loop_gate
+                .controls_checkpoint_invocation_state()
+                .controls()
+        );
+        let bridge_phase_executor_owns_phase_advance_state =
+            bridge_phase_executor_run_body_plan.phase_executor_owns_phase_advance_state();
+        let bridge_phase_executor_owns_phase_advance =
+            bridge_phase_executor_owns_phase_advance_state.owned();
+        println!(
+            "    bridge_phase_executor_owns_phase_advance: {}",
+            bridge_phase_executor_owns_phase_advance
+        );
+        let bridge_phase_executor_enclosing_run_active_state =
+            bridge_phase_executor_run_body_plan.enclosing_run_active_during_checkpoint_state();
+        let bridge_phase_executor_enclosing_run_active =
+            bridge_phase_executor_enclosing_run_active_state.active();
+        println!(
+            "    bridge_phase_executor_enclosing_run_active: {}",
+            bridge_phase_executor_enclosing_run_active
+        );
+        println!(
+            "    bridge_phase_executor_run_entry_count: {bridge_phase_executor_run_entry_count}"
+        );
+        let bridge_checkpoint_invocation_owned_by_enclosing_run_state =
+            bridge_phase_executor_run_body_plan
+                .checkpoint_invocation_owned_by_enclosing_run_state();
+        let bridge_checkpoint_invocation_owned_by_enclosing_run =
+            bridge_checkpoint_invocation_owned_by_enclosing_run_state.owned();
+        println!(
+            "    bridge_checkpoint_invocation_owned_by_enclosing_run: {}",
+            bridge_checkpoint_invocation_owned_by_enclosing_run
+        );
+        let bridge_checkpoint_callsite_routed_through_phase_executor_state =
+            bridge_phase_executor_run_body_plan
+                .checkpoint_callsite_routed_through_phase_executor_state();
+        let bridge_checkpoint_callsite_routed_through_phase_executor =
+            bridge_checkpoint_callsite_routed_through_phase_executor_state.routed();
+        println!(
+            "    bridge_checkpoint_callsite_routed_through_phase_executor: {}",
+            bridge_checkpoint_callsite_routed_through_phase_executor
+        );
+        let bridge_ready_step_count_from_phase_table_state =
+            bridge_phase_executor_run_body_plan.ready_step_count_from_phase_table_state();
+        let bridge_ready_step_count_from_phase_table =
+            bridge_ready_step_count_from_phase_table_state.sourced_from_phase_table();
+        println!(
+            "    bridge_ready_step_count_from_phase_table: {}",
+            bridge_ready_step_count_from_phase_table
+        );
+        let bridge_gate_table_run_gate_separate_from_checkpoint_gates_state =
+            bridge_phase_executor_run_body_plan
+                .gate_table_run_gate_separate_from_checkpoint_gates_state();
+        let bridge_gate_table_run_gate_separate_from_checkpoint_gates =
+            bridge_gate_table_run_gate_separate_from_checkpoint_gates_state
+                .separates_run_gate_from_checkpoint_gates();
+        println!(
+            "    bridge_gate_table_run_gate_separate_from_checkpoint_gates: {}",
+            bridge_gate_table_run_gate_separate_from_checkpoint_gates
+        );
+        let bridge_gates_remain_interleaved_state =
+            bridge_phase_executor_run_body_plan.gates_remain_interleaved_state();
+        let bridge_gates_remain_interleaved =
+            bridge_gates_remain_interleaved_state.remain_interleaved();
+        println!(
+            "    bridge_gates_remain_interleaved: {}",
+            bridge_gates_remain_interleaved
+        );
+        let sequence_loop_started_state =
+            bridge_phase_executor_run_body_plan.sequence_loop_started_state();
+        let sequence_loop_started = sequence_loop_started_state.started();
+        println!("    sequence_loop_started: {}", sequence_loop_started);
+        let execution_path_changed_state =
+            bridge_phase_executor_run_body_plan.execution_path_changed_state();
+        let execution_path_changed = execution_path_changed_state.changed();
+        println!("    execution_path_changed: {}", execution_path_changed);
+        let hip_graph_capture_started_state =
+            bridge_phase_executor_run_body_plan.hip_graph_capture_started_state();
+        let hip_graph_capture_started = hip_graph_capture_started_state.started();
+        println!(
+            "    hip_graph_capture_started: {}",
+            hip_graph_capture_started
+        );
+        Ok(())
+    }
+
+    fn controller_ready_checkpoint_stage(
+        &self,
+        controller_ready_checkpoint_stage_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyCheckpointStageState,
+    ) -> Result<()> {
+        let bridge_loop_phase = controller_ready_checkpoint_stage_state.bridge_loop_phase();
+        let bridge_loop_phase_index_state =
+            controller_ready_checkpoint_stage_state.bridge_loop_phase_index_state();
+        let bridge_loop_phase_index = bridge_loop_phase_index_state.index();
+        let bridge_phase_executor_run_body_plan_state =
+            controller_ready_checkpoint_stage_state.bridge_phase_executor_run_body_plan_state();
+        let bridge_phase_executor_run_body_plan =
+            bridge_phase_executor_run_body_plan_state.run_body_plan();
+        let next_ready_step_count_state =
+            controller_ready_checkpoint_stage_state.next_ready_step_count_state();
+        let sequence_loop_controller_step_count_state =
+            controller_ready_checkpoint_stage_state.sequence_loop_controller_step_count_state();
+        let next_ready_step_count = next_ready_step_count_state.count();
+        let sequence_loop_controller_step_count = sequence_loop_controller_step_count_state.count();
+        let bridge_loop_phase_count_state = bridge_phase_executor_run_body_plan.phase_count_state();
+        let bridge_loop_phase_count = bridge_loop_phase_count_state.count();
+        println!(
+            "  resident_layer_runner_dense_apply_sequence_bridge_loop_ready_checkpoint_stage:"
+        );
+        println!("    source: main_dense_apply_sequence_bridge_loop_controller_drain_ready_steps");
+        println!("    sequence_loop_bridge_phase_index: {bridge_loop_phase_index}");
+        println!("    sequence_loop_bridge_phase_count: {bridge_loop_phase_count}");
+        println!(
+            "    sequence_loop_bridge_phase_role: {}",
+            bridge_loop_phase.bridge_role
+        );
+        println!("    sequence_loop_controller_ready_step_count: {next_ready_step_count}");
+        println!("    sequence_loop_controller_step_count: {sequence_loop_controller_step_count}");
+        let bridge_phase_table_used_state =
+            bridge_phase_executor_run_body_plan.phase_table_used_state();
+        let bridge_phase_table_used = bridge_phase_table_used_state.used();
+        println!("    bridge_phase_table_used: {}", bridge_phase_table_used);
+        let bridge_phase_cursor_bound_to_checkpoint_state =
+            bridge_phase_executor_run_body_plan.phase_cursor_bound_to_checkpoint_state();
+        let bridge_phase_cursor_bound_to_checkpoint =
+            bridge_phase_cursor_bound_to_checkpoint_state.bound_to_checkpoint();
+        println!(
+            "    bridge_phase_cursor_bound_to_checkpoint: {}",
+            bridge_phase_cursor_bound_to_checkpoint
+        );
+        let bridge_ready_step_count_from_phase_table_state =
+            bridge_phase_executor_run_body_plan.ready_step_count_from_phase_table_state();
+        let bridge_ready_step_count_from_phase_table =
+            bridge_ready_step_count_from_phase_table_state.sourced_from_phase_table();
+        println!(
+            "    bridge_ready_step_count_from_phase_table: {}",
+            bridge_ready_step_count_from_phase_table
+        );
+        let bridge_phase_executor_owns_phase_advance_state =
+            bridge_phase_executor_run_body_plan.phase_executor_owns_phase_advance_state();
+        let bridge_phase_executor_owns_phase_advance =
+            bridge_phase_executor_owns_phase_advance_state.owned();
+        println!(
+            "    bridge_phase_executor_owns_phase_advance: {}",
+            bridge_phase_executor_owns_phase_advance
+        );
+        let bridge_checkpoint_callsite_routed_through_phase_executor_state =
+            bridge_phase_executor_run_body_plan
+                .checkpoint_callsite_routed_through_phase_executor_state();
+        let bridge_checkpoint_callsite_routed_through_phase_executor =
+            bridge_checkpoint_callsite_routed_through_phase_executor_state.routed();
+        println!(
+            "    bridge_checkpoint_callsite_routed_through_phase_executor: {}",
+            bridge_checkpoint_callsite_routed_through_phase_executor
+        );
+        let no_argument_ready_checkpoint_state =
+            bridge_phase_executor_run_body_plan.no_argument_ready_checkpoint_state();
+        let no_argument_ready_checkpoint =
+            no_argument_ready_checkpoint_state.no_argument_ready_checkpoint();
+        println!(
+            "    no_argument_ready_checkpoint: {}",
+            no_argument_ready_checkpoint
+        );
+        let bridge_checkpoint_bound_to_existing_gate_state =
+            bridge_phase_executor_run_body_plan.checkpoint_bound_to_existing_gate_state();
+        let bridge_checkpoint_bound_to_existing_gate =
+            bridge_checkpoint_bound_to_existing_gate_state.bound_to_existing_gate();
+        println!(
+            "    bridge_checkpoint_bound_to_existing_gate: {}",
+            bridge_checkpoint_bound_to_existing_gate
+        );
+        let bridge_loop_controller_ready_drain_active_state =
+            bridge_phase_executor_run_body_plan.controller_ready_drain_active_state();
+        let bridge_loop_controller_ready_drain_active =
+            bridge_loop_controller_ready_drain_active_state.active();
+        println!(
+            "    bridge_loop_controller_ready_drain_active: {}",
+            bridge_loop_controller_ready_drain_active
+        );
+        let bridge_gates_remain_interleaved_state =
+            bridge_phase_executor_run_body_plan.gates_remain_interleaved_state();
+        let bridge_gates_remain_interleaved =
+            bridge_gates_remain_interleaved_state.remain_interleaved();
+        println!(
+            "    bridge_gates_remain_interleaved: {}",
+            bridge_gates_remain_interleaved
+        );
+        let sequence_loop_started_state =
+            bridge_phase_executor_run_body_plan.sequence_loop_started_state();
+        let sequence_loop_started = sequence_loop_started_state.started();
+        println!("    sequence_loop_started: {}", sequence_loop_started);
+        let execution_path_changed_state =
+            bridge_phase_executor_run_body_plan.execution_path_changed_state();
+        let execution_path_changed = execution_path_changed_state.changed();
+        println!("    execution_path_changed: {}", execution_path_changed);
+        let hip_graph_capture_started_state =
+            bridge_phase_executor_run_body_plan.hip_graph_capture_started_state();
+        let hip_graph_capture_started = hip_graph_capture_started_state.started();
+        println!(
+            "    hip_graph_capture_started: {}",
+            hip_graph_capture_started
+        );
+        Ok(())
+    }
+
+    fn controller_ready_drain_begin(
+        &self,
+        controller_ready_drain_begin_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainBeginState,
+    ) -> Result<()> {
+        let bridge_loop_phase = controller_ready_drain_begin_state.bridge_loop_phase();
+        let bridge_loop_phase_index_state =
+            controller_ready_drain_begin_state.bridge_loop_phase_index_state();
+        let bridge_phase_executor_run_body_plan_state =
+            controller_ready_drain_begin_state.bridge_phase_executor_run_body_plan_state();
+        let bridge_loop_controller_state = self.controller_state();
+        let sequence_loop_controller_step_count_state =
+            bridge_loop_controller_state.step_count_state();
+        let sequence_loop_controller_step_count = sequence_loop_controller_step_count_state.count();
+        let next_ready_step_count_state = bridge_loop_phase.ready_step_count_after_phase();
+        let next_ready_step_count = next_ready_step_count_state.count();
+        if next_ready_step_count > sequence_loop_controller_step_count {
+            anyhow::bail!(
+                "resident dense apply sequence controller ready step count {} outside step count {}",
+                next_ready_step_count,
+                sequence_loop_controller_step_count
+            );
+        }
+        bridge_loop_controller_state.set_ready_step_count(next_ready_step_count_state);
+        self.controller_ready_drain_state()
+            .reset_for_cursor(bridge_loop_controller_state.cursor_state());
+        self.controller_ready_checkpoint_stage(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyCheckpointStageState::from_parts_state(
+                bridge_loop_phase,
+                bridge_loop_phase_index_state,
+                bridge_phase_executor_run_body_plan_state,
+                next_ready_step_count_state,
+                sequence_loop_controller_step_count_state,
+            ),
+        )
+    }
+
+    fn controller_stage(
+        &self,
+        controller_stage_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStageState,
+    ) -> Result<()> {
+        let bridge_loop_phase = controller_stage_state.bridge_loop_phase();
+        let bridge_loop_phase_index_state = controller_stage_state.bridge_loop_phase_index_state();
+        let bridge_loop_phase_index = bridge_loop_phase_index_state.index();
+        let bridge_phase_executor_run_body_plan_state =
+            controller_stage_state.bridge_phase_executor_run_body_plan_state();
+        let bridge_phase_executor_run_body_plan =
+            bridge_phase_executor_run_body_plan_state.run_body_plan();
+        let sequence_loop_controller_step_cursor =
+            controller_stage_state.sequence_loop_controller_step_cursor();
+        let sequence_loop_controller_ready_step_count_state =
+            controller_stage_state.sequence_loop_controller_ready_step_count_state();
+        let sequence_loop_controller_step_count_state =
+            controller_stage_state.sequence_loop_controller_step_count_state();
+        let sequence_loop_controller_step_index = sequence_loop_controller_step_cursor.index();
+        let sequence_loop_controller_ready_step_count =
+            sequence_loop_controller_ready_step_count_state.count();
+        let sequence_loop_controller_step_count = sequence_loop_controller_step_count_state.count();
+        let controller_step_index_derived_from_cursor_state =
+            bridge_phase_executor_run_body_plan.controller_step_index_derived_from_cursor_state();
+        let controller_step_index_derived_from_cursor =
+            controller_step_index_derived_from_cursor_state.derived_from_cursor();
+        let helper_invocation_bound_to_controller_cursor_state =
+            bridge_phase_executor_run_body_plan
+                .helper_invocation_bound_to_controller_cursor_state();
+        let helper_invocation_bound_to_controller_cursor =
+            helper_invocation_bound_to_controller_cursor_state.bound_to_controller_cursor();
+        let direct_helper_invocation_replaced_by_controller_step_state =
+            bridge_phase_executor_run_body_plan
+                .direct_helper_invocation_replaced_by_controller_step_state();
+        let direct_helper_invocation_replaced_by_controller_step =
+            direct_helper_invocation_replaced_by_controller_step_state
+                .replaced_by_controller_step();
+        let direct_controller_next_invocations_removed_state =
+            bridge_phase_executor_run_body_plan.direct_controller_next_invocations_removed_state();
+        let direct_controller_next_invocations_removed =
+            direct_controller_next_invocations_removed_state.removed();
+        let explicit_controller_step_literals_removed_state =
+            bridge_phase_executor_run_body_plan.explicit_controller_step_literals_removed_state();
+        let explicit_controller_step_literals_removed =
+            explicit_controller_step_literals_removed_state.removed();
+        let controller_cursor_validated_against_step_count_state =
+            bridge_phase_executor_run_body_plan
+                .controller_cursor_validated_against_step_count_state();
+        let controller_cursor_validated_against_step_count =
+            controller_cursor_validated_against_step_count_state.validated_against_step_count();
+        let controller_cursor_advances_before_shared_driver_state =
+            bridge_phase_executor_run_body_plan
+                .controller_cursor_advances_before_shared_driver_state();
+        let controller_cursor_advances_before_shared_driver =
+            controller_cursor_advances_before_shared_driver_state.advances_before_shared_driver();
+        let controller_step_dispatched_by_ready_drain_loop_state =
+            bridge_phase_executor_run_body_plan
+                .controller_step_dispatched_by_ready_drain_loop_state();
+        let controller_step_dispatched_by_ready_drain_loop =
+            controller_step_dispatched_by_ready_drain_loop_state.dispatched_by_ready_drain_loop();
+        println!("  resident_layer_runner_dense_apply_sequence_bridge_loop_controller_stage:");
+        println!("    source: main_dense_apply_sequence_bridge_loop_controller_drain_ready_steps");
+        println!("    sequence_loop_bridge_phase_index: {bridge_loop_phase_index}");
+        println!(
+            "    sequence_loop_bridge_phase_role: {}",
+            bridge_loop_phase.bridge_role
+        );
+        println!("    sequence_loop_controller_step_index: {sequence_loop_controller_step_index}");
+        println!(
+            "    sequence_loop_controller_ready_step_count: {sequence_loop_controller_ready_step_count}"
+        );
+        println!("    sequence_loop_controller_step_count: {sequence_loop_controller_step_count}");
+        println!(
+            "    controller_step_index_derived_from_cursor: {}",
+            controller_step_index_derived_from_cursor
+        );
+        println!(
+            "    helper_invocation_bound_to_controller_cursor: {}",
+            helper_invocation_bound_to_controller_cursor
+        );
+        println!(
+            "    direct_helper_invocation_replaced_by_controller_step: {}",
+            direct_helper_invocation_replaced_by_controller_step
+        );
+        println!(
+            "    direct_controller_next_invocations_removed: {}",
+            direct_controller_next_invocations_removed
+        );
+        println!(
+            "    explicit_controller_step_literals_removed: {}",
+            explicit_controller_step_literals_removed
+        );
+        println!(
+            "    controller_cursor_validated_against_step_count: {}",
+            controller_cursor_validated_against_step_count
+        );
+        println!(
+            "    controller_cursor_advances_before_shared_driver: {}",
+            controller_cursor_advances_before_shared_driver
+        );
+        println!(
+            "    controller_step_dispatched_by_ready_drain_loop: {}",
+            controller_step_dispatched_by_ready_drain_loop
+        );
+        let bridge_phase_table_used_state =
+            bridge_phase_executor_run_body_plan.phase_table_used_state();
+        let bridge_phase_table_used = bridge_phase_table_used_state.used();
+        println!("    bridge_phase_table_used: {}", bridge_phase_table_used);
+        let bridge_phase_cursor_bound_to_checkpoint_state =
+            bridge_phase_executor_run_body_plan.phase_cursor_bound_to_checkpoint_state();
+        let bridge_phase_cursor_bound_to_checkpoint =
+            bridge_phase_cursor_bound_to_checkpoint_state.bound_to_checkpoint();
+        println!(
+            "    bridge_phase_cursor_bound_to_checkpoint: {}",
+            bridge_phase_cursor_bound_to_checkpoint
+        );
+        let bridge_ready_step_count_from_phase_table_state =
+            bridge_phase_executor_run_body_plan.ready_step_count_from_phase_table_state();
+        let bridge_ready_step_count_from_phase_table =
+            bridge_ready_step_count_from_phase_table_state.sourced_from_phase_table();
+        println!(
+            "    bridge_ready_step_count_from_phase_table: {}",
+            bridge_ready_step_count_from_phase_table
+        );
+        let bridge_phase_executor_owns_phase_advance_state =
+            bridge_phase_executor_run_body_plan.phase_executor_owns_phase_advance_state();
+        let bridge_phase_executor_owns_phase_advance =
+            bridge_phase_executor_owns_phase_advance_state.owned();
+        println!(
+            "    bridge_phase_executor_owns_phase_advance: {}",
+            bridge_phase_executor_owns_phase_advance
+        );
+        let bridge_checkpoint_callsite_routed_through_phase_executor_state =
+            bridge_phase_executor_run_body_plan
+                .checkpoint_callsite_routed_through_phase_executor_state();
+        let bridge_checkpoint_callsite_routed_through_phase_executor =
+            bridge_checkpoint_callsite_routed_through_phase_executor_state.routed();
+        println!(
+            "    bridge_checkpoint_callsite_routed_through_phase_executor: {}",
+            bridge_checkpoint_callsite_routed_through_phase_executor
+        );
+        let bridge_loop_controller_ready_drain_active_state =
+            bridge_phase_executor_run_body_plan.controller_ready_drain_active_state();
+        let bridge_loop_controller_ready_drain_active =
+            bridge_loop_controller_ready_drain_active_state.active();
+        println!(
+            "    bridge_loop_controller_ready_drain_active: {}",
+            bridge_loop_controller_ready_drain_active
+        );
+        let bridge_gates_remain_interleaved_state =
+            bridge_phase_executor_run_body_plan.gates_remain_interleaved_state();
+        let bridge_gates_remain_interleaved =
+            bridge_gates_remain_interleaved_state.remain_interleaved();
+        println!(
+            "    bridge_gates_remain_interleaved: {}",
+            bridge_gates_remain_interleaved
+        );
+        let sequence_loop_started_state =
+            bridge_phase_executor_run_body_plan.sequence_loop_started_state();
+        let sequence_loop_started = sequence_loop_started_state.started();
+        println!("    sequence_loop_started: {}", sequence_loop_started);
+        let execution_path_changed_state =
+            bridge_phase_executor_run_body_plan.execution_path_changed_state();
+        let execution_path_changed = execution_path_changed_state.changed();
+        println!("    execution_path_changed: {}", execution_path_changed);
+        let hip_graph_capture_started_state =
+            bridge_phase_executor_run_body_plan.hip_graph_capture_started_state();
+        let hip_graph_capture_started = hip_graph_capture_started_state.started();
+        println!(
+            "    hip_graph_capture_started: {}",
+            hip_graph_capture_started
+        );
+        Ok(())
+    }
+
+    fn controller_ready_drain_next_step(
+        &self,
+        controller_ready_drain_next_step_request_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainNextStepRequestState,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainNextStepState>
+    {
+        let bridge_loop_phase = controller_ready_drain_next_step_request_state.bridge_loop_phase();
+        let bridge_loop_phase_index_state =
+            controller_ready_drain_next_step_request_state.bridge_loop_phase_index_state();
+        let bridge_phase_executor_run_body_plan_state =
+            controller_ready_drain_next_step_request_state
+                .bridge_phase_executor_run_body_plan_state();
+        let bridge_phase_executor_run_body_plan =
+            bridge_phase_executor_run_body_plan_state.run_body_plan();
+        let bridge_loop_controller_state = self.controller_state();
+        let sequence_loop_controller_ready_step_count_state =
+            bridge_loop_controller_state.ready_step_count_state();
+        let sequence_loop_controller_ready_step_count =
+            sequence_loop_controller_ready_step_count_state.count();
+        let sequence_loop_controller_step_count_state =
+            bridge_loop_controller_state.step_count_state();
+        let sequence_loop_controller_step_count = sequence_loop_controller_step_count_state.count();
+        let sequence_loop_controller_step_cursor = bridge_loop_controller_state.cursor_state();
+        let sequence_loop_controller_step_index = sequence_loop_controller_step_cursor.index();
+        if sequence_loop_controller_step_index >= sequence_loop_controller_ready_step_count {
+            return Ok(
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainNextStepState::from_step_option(
+                    None,
+                ),
+            );
+        }
+        if sequence_loop_controller_step_index >= sequence_loop_controller_step_count {
+            anyhow::bail!(
+                "resident dense apply sequence controller cursor {} outside step count {}",
+                sequence_loop_controller_step_index,
+                sequence_loop_controller_step_count
+            );
+        }
+        bridge_loop_controller_state.advance_cursor_to(
+            sequence_loop_controller_step_cursor.advanced_by(
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_CURSOR_ADVANCE_STEP,
+            ),
+        );
+        self.controller_stage(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerStageState::from_parts(
+                bridge_loop_phase,
+                bridge_loop_phase_index_state,
+                bridge_phase_executor_run_body_plan,
+                sequence_loop_controller_step_cursor,
+                sequence_loop_controller_ready_step_count_state,
+                sequence_loop_controller_step_count_state,
+            ),
+        )?;
+        Ok(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainNextStepState::from_step_option(
+                Some(self.controller_ready_drain_step_from_construction_state(
+                    QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepConstructionState::from_parts(
+                        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCursorState::from_cursor(
+                            sequence_loop_controller_step_cursor,
+                        ),
+                        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState::from_run_body_plan(
+                            bridge_phase_executor_run_body_plan,
+                        ),
+                    ),
+                )),
+            ),
+        )
+    }
+
+    fn controller_ready_drain_step_from_construction_state(
+        &self,
+        controller_ready_drain_step_construction_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepConstructionState,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStep {
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStep::new(
+            controller_ready_drain_step_construction_state
+                .sequence_loop_controller_step_cursor_state(),
+            controller_ready_drain_step_construction_state
+                .bridge_phase_executor_run_body_plan_state(),
+        )
+    }
+
+    fn controller_ready_drain_dispatch_next_step(
+        &self,
+        controller_ready_drain_dispatch_next_step_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchNextStepState,
+    ) -> Result<()> {
+        let bridge_phase_executor_run_body_plan_state =
+            controller_ready_drain_dispatch_next_step_state
+                .bridge_phase_executor_run_body_plan_state();
+        self.dispatch_callsite_stage(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDispatchCallsiteStageState::from_run_body_plan_state(
+                bridge_phase_executor_run_body_plan_state,
+            ),
+        )
+    }
+
+    fn controller_ready_drain_dispatch_step_complete(
+        &self,
+        controller_ready_drain_dispatch_complete_step_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchCompleteStepState,
+    ) -> Result<()> {
+        let sequence_loop_controller_step_cursor_state =
+            controller_ready_drain_dispatch_complete_step_state
+                .sequence_loop_controller_step_cursor_state();
+        let bridge_loop_controller_state = self.controller_state();
+        let sequence_loop_controller_cursor_state = bridge_loop_controller_state.cursor_state();
+        let sequence_loop_controller_cursor = sequence_loop_controller_cursor_state.index();
+        let sequence_loop_controller_step_index =
+            sequence_loop_controller_step_cursor_state.cursor().index();
+        if sequence_loop_controller_step_index >= sequence_loop_controller_cursor {
+            anyhow::bail!(
+                "resident dense apply sequence controller completed step {} before cursor advanced to {}",
+                sequence_loop_controller_step_index,
+                sequence_loop_controller_cursor
+            );
+        }
+        let controller_ready_drain_state = self.controller_ready_drain_state();
+        let controller_ready_drain_cursor_at_begin_state =
+            controller_ready_drain_state.cursor_at_begin_state();
+        let controller_ready_drain_cursor_at_begin =
+            controller_ready_drain_cursor_at_begin_state.index();
+        let controller_ready_drain_drained_step_count_state =
+            controller_ready_drain_state.drained_step_count_state();
+        let next_drained_step_count = controller_ready_drain_drained_step_count_state.count()
+            + QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CONTROLLER_DRAINED_STEP_ADVANCE;
+        let controller_steps_advanced_in_drain =
+            sequence_loop_controller_cursor.saturating_sub(controller_ready_drain_cursor_at_begin);
+        if next_drained_step_count > controller_steps_advanced_in_drain {
+            anyhow::bail!(
+                "resident dense apply sequence controller drained step count {} exceeded advanced step count {}",
+                next_drained_step_count,
+                controller_steps_advanced_in_drain
+            );
+        }
+        controller_ready_drain_state.advance_drained_step_count_to(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepCount::from_count(
+                next_drained_step_count,
+            ),
+        );
+        Ok(())
+    }
+
+    fn phase_executor_next_checkpoint_ready_drain_steps(
+        &self,
+        phase_executor_next_checkpoint_ready_drain_steps_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorNextCheckpointReadyDrainStepsState,
+        dispatch_controller_ready_drain_step:
+            &mut dyn QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrain,
+    ) -> Result<()> {
+        let bridge_phase_executor_run_body_plan_state =
+            phase_executor_next_checkpoint_ready_drain_steps_state
+                .bridge_phase_executor_run_body_plan_state();
+        let bridge_phase_executor_checkpoint = self.phase_executor_next_checkpoint(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorNextCheckpointState::from_run_body_plan_state(
+                bridge_phase_executor_run_body_plan_state,
+            ),
+        )?;
+        let bridge_loop_phase_index_state =
+            bridge_phase_executor_checkpoint.bridge_loop_phase_index_state();
+        self.controller_ready_drain_steps(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepsState::from_parts(
+                bridge_phase_executor_checkpoint.bridge_loop_phase,
+                bridge_loop_phase_index_state,
+                bridge_phase_executor_run_body_plan_state,
+            ),
+            dispatch_controller_ready_drain_step,
+        )
+    }
+
+    fn phase_executor_begin_ready_drain_steps(
+        &self,
+        phase_executor_begin_ready_drain_steps_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginReadyDrainStepsState,
+        dispatch_controller_ready_drain_step:
+            &mut dyn QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrain,
+    ) -> Result<()> {
+        let bridge_phase_executor_run_body_plan_state =
+            phase_executor_begin_ready_drain_steps_state
+                .bridge_phase_executor_run_body_plan_state();
+        self.phase_executor_begin_checkpoint_invocation(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginCheckpointInvocationState::from_run_body_plan_state(
+                bridge_phase_executor_run_body_plan_state,
+            ),
+        )?;
+        self.phase_executor_next_checkpoint_ready_drain_steps(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorNextCheckpointReadyDrainStepsState::from_run_body_plan_state(
+                bridge_phase_executor_run_body_plan_state,
+            ),
+            dispatch_controller_ready_drain_step,
+        )?;
+        self.phase_executor_checkpoint_invocation_complete();
+        Ok(())
+    }
+
+    fn open_controller_ready_controller_drain_adapter<'drain>(
+        open_controller_ready_drain_step:
+            &'drain mut dyn DenseApplySequenceBridgeLoopOpenControllerReadyDrain,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopOpenControllerReadyControllerDrainAdapter<
+        'drain,
+    >{
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopOpenControllerReadyControllerDrainAdapter::new(
+            open_controller_ready_drain_step,
+        )
+    }
+
+    fn phase_executor_run_body_open<O>(
+        &self,
+        mut dispatch_controller_ready_drain_step: O,
+    ) -> Result<()>
+    where
+        O: DenseApplySequenceBridgeLoopOpenControllerReadyDrain,
+    {
+        let bridge_phase_executor_run_body_plan = self.run_body_plan();
+        let bridge_phase_executor_run_body_plan_state =
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState::from_run_body_plan(
+                bridge_phase_executor_run_body_plan,
+            );
+        let mut controller_ready_drain_step = Self::open_controller_ready_controller_drain_adapter(
+            &mut dispatch_controller_ready_drain_step,
+        );
+        self.phase_executor_begin_ready_drain_steps(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorBeginReadyDrainStepsState::from_run_body_plan_state(
+                bridge_phase_executor_run_body_plan_state,
+            ),
+            &mut controller_ready_drain_step,
+        )?;
+        self.phase_executor_run_body_begin(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyBeginState::from_run_body_plan_state(
+                bridge_phase_executor_run_body_plan_state,
+            ),
+        )?;
+        Ok(())
+    }
+
+    fn phase_executor_run_body_close(&self) -> Result<()> {
+        let bridge_phase_executor_run_body_plan = self.run_body_plan();
+        let bridge_phase_executor_run_body_plan_state =
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState::from_run_body_plan(
+                bridge_phase_executor_run_body_plan,
+            );
+        self.phase_executor_complete(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCompleteState::from_run_body_plan_state(
+                bridge_phase_executor_run_body_plan_state,
+            ),
+        )
+    }
+
+    fn phase_executor_run_body_close_after<C>(&self, run_bridge_body: C) -> Result<()>
+    where
+        C: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCloseAfter<'a>,
+    {
+        run_bridge_body.run(self)?;
+        self.phase_executor_run_body_close()
+    }
+
+    fn run_body_open_drain_adapter<'body, 'frame, F>(
+        &'frame self,
+        run_bridge_body: &'body mut F,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyOpenDrainAdapter<
+        'body,
+        'frame,
+        'a,
+        F,
+    >
+    where
+        F: DenseApplySequenceBridgeLoopRunBody,
+    {
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyOpenDrainAdapter::new(
+            self,
+            run_bridge_body,
+        )
+    }
+
+    fn run_body_close_after_adapter<'body, F>(
+        run_bridge_body: &'body mut F,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCloseAfterAdapter<'body, F>
+    where
+        F: DenseApplySequenceBridgeLoopRunBody,
+    {
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunBodyCloseAfterAdapter::new(
+            run_bridge_body,
+        )
+    }
+
+    fn phase_executor_run_body<F>(&self, mut run_bridge_body: F) -> Result<()>
+    where
+        F: DenseApplySequenceBridgeLoopRunBody,
+    {
+        let run_body_open_drain = self.run_body_open_drain_adapter(&mut run_bridge_body);
+        self.phase_executor_run_body_open(run_body_open_drain)?;
+        let run_body_close_after = Self::run_body_close_after_adapter(&mut run_bridge_body);
+        self.phase_executor_run_body_close_after(run_body_close_after)
+    }
+
+    fn checkpoint_gate_ready_controller_drain_adapter<'drain>(
+        dispatch_checkpoint_gate_ready_drain_step:
+            &'drain mut dyn QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrain,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyControllerDrainAdapter<
+        'drain,
+    >{
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyControllerDrainAdapter::new(
+            dispatch_checkpoint_gate_ready_drain_step,
+        )
+    }
+
+    fn phase_executor_checkpoint_gate_ready_drain_steps(
+        &self,
+        phase_executor_checkpoint_gate_ready_drain_steps_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyDrainStepsState,
+        dispatch_checkpoint_gate_ready_drain_step:
+            &mut dyn QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrain,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReady>
+    {
+        let bridge_checkpoint_gate =
+            phase_executor_checkpoint_gate_ready_drain_steps_state.bridge_checkpoint_gate();
+        let bridge_phase_executor_run_body_plan_state =
+            phase_executor_checkpoint_gate_ready_drain_steps_state
+                .bridge_phase_executor_run_body_plan_state();
+        let bridge_checkpoint_gate_ready = self.phase_executor_checkpoint_gate_ready(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyLookupState::from_checkpoint_gate(
+                bridge_checkpoint_gate,
+            ),
+        )?;
+        let bridge_checkpoint_gate_ready_state =
+            bridge_checkpoint_gate_ready.bridge_checkpoint_gate_ready_state();
+        if bridge_checkpoint_gate_ready_state.ready() {
+            dispatch_checkpoint_gate_ready_drain_step.run(
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrainStep::BeforeCheckpoint,
+            )?;
+            self.phase_executor_checkpoint_gate_ready_invocation();
+            let mut controller_ready_drain_step =
+                Self::checkpoint_gate_ready_controller_drain_adapter(
+                    dispatch_checkpoint_gate_ready_drain_step,
+                );
+            self.phase_executor_next_checkpoint_ready_drain_steps(
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorNextCheckpointReadyDrainStepsState::from_run_body_plan_state(
+                    bridge_phase_executor_run_body_plan_state,
+                ),
+                &mut controller_ready_drain_step,
+            )?;
+            self.phase_executor_checkpoint_invocation_complete();
+            self.phase_executor_checkpoint_gate_ready_complete(
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyCompleteState::from_parts_state(
+                    bridge_checkpoint_gate_ready,
+                    bridge_phase_executor_run_body_plan_state,
+                ),
+            )?;
+        }
+        Ok(bridge_checkpoint_gate_ready)
+    }
+
+    fn phase_executor_next_checkpoint_gate_ready_drain_steps(
+        &self,
+        dispatch_checkpoint_gate_ready_drain_step:
+            &mut dyn QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyDrain,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState> {
+        let bridge_phase_executor_run_body_plan = self.run_body_plan();
+        let bridge_phase_executor_run_body_plan_state =
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepRunBodyPlanState::from_run_body_plan(
+                bridge_phase_executor_run_body_plan,
+            );
+        let bridge_checkpoint_gate = self.next_checkpoint_gate_from_readiness_table()?;
+        let bridge_checkpoint_gate_ready = self.phase_executor_checkpoint_gate_ready_drain_steps(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyDrainStepsState::from_parts_state(
+                bridge_checkpoint_gate,
+                bridge_phase_executor_run_body_plan_state,
+            ),
+            dispatch_checkpoint_gate_ready_drain_step,
+        )?;
+        let bridge_checkpoint_gate_ready_state = self.phase_executor_checkpoint_gate_ready_driver(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyDriverState::from_parts_state(
+                bridge_checkpoint_gate_ready,
+                bridge_phase_executor_run_body_plan_state,
+            ),
+        )?;
+        Ok(bridge_checkpoint_gate_ready_state)
+    }
+
+    fn phase_executor_next_checkpoint_gate_ready_pre_checkpoint_controller_drain_steps(
+        &self,
+        dispatch_checkpoint_gate_ready_drain_step: &mut dyn QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyPreCheckpointControllerDrain,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState> {
+        let mut checkpoint_gate_ready_drain_step =
+            Self::checkpoint_gate_ready_pre_checkpoint_controller_drain_adapter(
+                dispatch_checkpoint_gate_ready_drain_step,
+            );
+        self.phase_executor_next_checkpoint_gate_ready_drain_steps(
+            &mut checkpoint_gate_ready_drain_step,
+        )
+    }
+
+    fn checkpoint_gate_ready_pre_checkpoint_controller_drain_adapter<'drain>(
+        dispatch_checkpoint_gate_ready_drain_step:
+            &'drain mut dyn QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyPreCheckpointControllerDrain,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyPreCheckpointControllerDrainAdapter<
+        'drain,
+    >{
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyPreCheckpointControllerDrainAdapter::new(
+            dispatch_checkpoint_gate_ready_drain_step,
+        )
+    }
+
+    fn controller_ready_drain_steps(
+        &self,
+        controller_ready_drain_steps_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainStepsState,
+        dispatch_controller_ready_drain_step:
+            &mut dyn QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrain,
+    ) -> Result<()> {
+        let bridge_loop_phase = controller_ready_drain_steps_state.bridge_loop_phase();
+        let bridge_loop_phase_index_state =
+            controller_ready_drain_steps_state.bridge_loop_phase_index_state();
+        let bridge_phase_executor_run_body_plan_state =
+            controller_ready_drain_steps_state.bridge_phase_executor_run_body_plan_state();
+        self.controller_ready_drain_begin(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainBeginState::from_parts(
+                bridge_loop_phase,
+                bridge_loop_phase_index_state,
+                bridge_phase_executor_run_body_plan_state,
+            ),
+        )?;
+        while let Some(controller_ready_drain_step) = self
+            .controller_ready_drain_next_step(
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainNextStepRequestState::from_parts(
+                    bridge_loop_phase,
+                    bridge_loop_phase_index_state,
+                    bridge_phase_executor_run_body_plan_state,
+                ),
+            )?
+            .controller_ready_drain_step()
+        {
+            self.controller_ready_drain_dispatch_next_step(
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchNextStepState::from_step(
+                    controller_ready_drain_step,
+                ),
+            )?;
+            dispatch_controller_ready_drain_step.run(
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchRunStepState::from_step(
+                    controller_ready_drain_step,
+                ),
+            )?;
+            self.controller_ready_drain_dispatch_step_complete(
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainDispatchCompleteStepState::from_step(
+                    controller_ready_drain_step,
+                ),
+            )?;
+        }
+        self.controller_ready_drain_complete(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainCompleteState::from_run_body_plan_state(
+                bridge_phase_executor_run_body_plan_state,
+            ),
+        )
+    }
+
+    fn dispatch_callsite_stage(
+        &self,
+        dispatch_callsite_stage_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopDispatchCallsiteStageState,
+    ) -> Result<()> {
+        let bridge_phase_executor_run_body_plan_state =
+            dispatch_callsite_stage_state.bridge_phase_executor_run_body_plan_state();
+        let bridge_phase_executor_run_body_plan =
+            bridge_phase_executor_run_body_plan_state.run_body_plan();
+        let shared_driver_callsite_used_state =
+            bridge_phase_executor_run_body_plan.shared_driver_callsite_used_state();
+        let shared_driver_callsite_used = shared_driver_callsite_used_state.used();
+        let main_apply_sequence_driver_callsites_collapsed_state =
+            bridge_phase_executor_run_body_plan
+                .main_apply_sequence_driver_callsites_collapsed_state();
+        let main_apply_sequence_driver_callsites_collapsed =
+            main_apply_sequence_driver_callsites_collapsed_state.collapsed();
+        let main_apply_sequence_buffer_window_callsites_collapsed_state =
+            bridge_phase_executor_run_body_plan
+                .main_apply_sequence_buffer_window_callsites_collapsed_state();
+        let main_apply_sequence_buffer_window_callsites_collapsed =
+            main_apply_sequence_buffer_window_callsites_collapsed_state.collapsed();
+        let interleaved_bridge_work_preserved_state =
+            bridge_phase_executor_run_body_plan.interleaved_bridge_work_preserved_state();
+        let interleaved_bridge_work_preserved = interleaved_bridge_work_preserved_state.preserved();
+        println!("  resident_layer_runner_dense_apply_sequence_loop_callsite_stage:");
+        println!("    source: main_dense_apply_sequence_dispatch_next_loop_step");
+        println!(
+            "    shared_driver_callsite_used: {}",
+            shared_driver_callsite_used
+        );
+        println!(
+            "    main_apply_sequence_driver_callsites_collapsed: {}",
+            main_apply_sequence_driver_callsites_collapsed
+        );
+        println!(
+            "    main_apply_sequence_buffer_window_callsites_collapsed: {}",
+            main_apply_sequence_buffer_window_callsites_collapsed
+        );
+        let bridge_loop_controller_ready_drain_active_state =
+            bridge_phase_executor_run_body_plan.controller_ready_drain_active_state();
+        let bridge_loop_controller_ready_drain_active =
+            bridge_loop_controller_ready_drain_active_state.active();
+        println!(
+            "    bridge_loop_controller_ready_drain_active: {}",
+            bridge_loop_controller_ready_drain_active
+        );
+        println!(
+            "    interleaved_bridge_work_preserved: {}",
+            interleaved_bridge_work_preserved
+        );
+        let sequence_loop_started_state =
+            bridge_phase_executor_run_body_plan.sequence_loop_started_state();
+        let sequence_loop_started = sequence_loop_started_state.started();
+        println!("    sequence_loop_started: {}", sequence_loop_started);
+        let execution_path_changed_state =
+            bridge_phase_executor_run_body_plan.execution_path_changed_state();
+        let execution_path_changed = execution_path_changed_state.changed();
+        println!("    execution_path_changed: {}", execution_path_changed);
+        let hip_graph_capture_started_state =
+            bridge_phase_executor_run_body_plan.hip_graph_capture_started_state();
+        let hip_graph_capture_started = hip_graph_capture_started_state.started();
+        println!(
+            "    hip_graph_capture_started: {}",
+            hip_graph_capture_started
+        );
+        Ok(())
+    }
+
+    fn controller_drain_complete_stage(
+        &self,
+        controller_drain_complete_stage_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerDrainCompleteStageState,
+    ) -> Result<()> {
+        let bridge_phase_executor_run_body_plan_state =
+            controller_drain_complete_stage_state.bridge_phase_executor_run_body_plan_state();
+        let bridge_phase_executor_run_body_plan =
+            bridge_phase_executor_run_body_plan_state.run_body_plan();
+        let sequence_loop_controller_cursor_after_drain_state =
+            controller_drain_complete_stage_state
+                .sequence_loop_controller_cursor_after_drain_state();
+        let sequence_loop_bridge_phase_cursor_after_drain_state =
+            controller_drain_complete_stage_state
+                .sequence_loop_bridge_phase_cursor_after_drain_state();
+        let sequence_loop_controller_drained_step_count_state =
+            controller_drain_complete_stage_state
+                .sequence_loop_controller_drained_step_count_state();
+        let sequence_loop_controller_cursor_after_drain =
+            sequence_loop_controller_cursor_after_drain_state.index();
+        let sequence_loop_bridge_phase_cursor_after_drain =
+            sequence_loop_bridge_phase_cursor_after_drain_state.index();
+        let sequence_loop_controller_drained_step_count =
+            sequence_loop_controller_drained_step_count_state.count();
+        println!("  resident_layer_runner_dense_apply_sequence_bridge_loop_drain_complete_stage:");
+        println!("    source: main_dense_apply_sequence_bridge_loop_controller_drain_ready_steps");
+        println!(
+            "    sequence_loop_controller_cursor_after_drain: {sequence_loop_controller_cursor_after_drain}"
+        );
+        println!(
+            "    sequence_loop_bridge_phase_cursor_after_drain: {sequence_loop_bridge_phase_cursor_after_drain}"
+        );
+        println!(
+            "    sequence_loop_controller_drained_step_count: {sequence_loop_controller_drained_step_count}"
+        );
+        let bridge_phase_table_used_state =
+            bridge_phase_executor_run_body_plan.phase_table_used_state();
+        let bridge_phase_table_used = bridge_phase_table_used_state.used();
+        println!("    bridge_phase_table_used: {}", bridge_phase_table_used);
+        let bridge_phase_cursor_bound_to_checkpoint_state =
+            bridge_phase_executor_run_body_plan.phase_cursor_bound_to_checkpoint_state();
+        let bridge_phase_cursor_bound_to_checkpoint =
+            bridge_phase_cursor_bound_to_checkpoint_state.bound_to_checkpoint();
+        println!(
+            "    bridge_phase_cursor_bound_to_checkpoint: {}",
+            bridge_phase_cursor_bound_to_checkpoint
+        );
+        let bridge_phase_executor_owns_phase_advance_state =
+            bridge_phase_executor_run_body_plan.phase_executor_owns_phase_advance_state();
+        let bridge_phase_executor_owns_phase_advance =
+            bridge_phase_executor_owns_phase_advance_state.owned();
+        println!(
+            "    bridge_phase_executor_owns_phase_advance: {}",
+            bridge_phase_executor_owns_phase_advance
+        );
+        let bridge_checkpoint_callsite_routed_through_phase_executor_state =
+            bridge_phase_executor_run_body_plan
+                .checkpoint_callsite_routed_through_phase_executor_state();
+        let bridge_checkpoint_callsite_routed_through_phase_executor =
+            bridge_checkpoint_callsite_routed_through_phase_executor_state.routed();
+        println!(
+            "    bridge_checkpoint_callsite_routed_through_phase_executor: {}",
+            bridge_checkpoint_callsite_routed_through_phase_executor
+        );
+        let bridge_loop_controller_ready_drain_active_state =
+            bridge_phase_executor_run_body_plan.controller_ready_drain_active_state();
+        let bridge_loop_controller_ready_drain_active =
+            bridge_loop_controller_ready_drain_active_state.active();
+        println!(
+            "    bridge_loop_controller_ready_drain_active: {}",
+            bridge_loop_controller_ready_drain_active
+        );
+        let sequence_loop_started_state =
+            bridge_phase_executor_run_body_plan.sequence_loop_started_state();
+        let sequence_loop_started = sequence_loop_started_state.started();
+        println!("    sequence_loop_started: {}", sequence_loop_started);
+        let execution_path_changed_state =
+            bridge_phase_executor_run_body_plan.execution_path_changed_state();
+        let execution_path_changed = execution_path_changed_state.changed();
+        println!("    execution_path_changed: {}", execution_path_changed);
+        let hip_graph_capture_started_state =
+            bridge_phase_executor_run_body_plan.hip_graph_capture_started_state();
+        let hip_graph_capture_started = hip_graph_capture_started_state.started();
+        println!(
+            "    hip_graph_capture_started: {}",
+            hip_graph_capture_started
+        );
+        Ok(())
+    }
+
+    fn controller_ready_drain_complete(
+        &self,
+        controller_ready_drain_complete_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerReadyDrainCompleteState,
+    ) -> Result<()> {
+        let bridge_phase_executor_run_body_plan_state =
+            controller_ready_drain_complete_state.bridge_phase_executor_run_body_plan_state();
+        self.controller_drain_complete_stage(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopControllerDrainCompleteStageState::from_parts(
+                bridge_phase_executor_run_body_plan_state,
+                self.controller_state().cursor_state(),
+                self.cursor_state().phase_index_state(),
+                self.controller_ready_drain_state()
+                    .drained_step_count_state(),
+            ),
+        )
+    }
+
+    fn phase_executor_complete(
+        &self,
+        phase_executor_complete_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCompleteState,
+    ) -> Result<()> {
+        let bridge_phase_executor_run_body_plan_state =
+            phase_executor_complete_state.bridge_phase_executor_run_body_plan_state();
+        let bridge_phase_executor_run_body_plan =
+            bridge_phase_executor_run_body_plan_state.run_body_plan();
+        let bridge_phase_executor_state = self.phase_executor_state();
+        let bridge_loop_cursor_state = self.cursor_state();
+        let sequence_loop_controller_state = self.controller_state();
+        let bridge_phase_executor_active_state = bridge_phase_executor_state.active_state();
+        if !bridge_phase_executor_active_state.active() {
+            anyhow::bail!(
+                "resident dense apply sequence bridge phase executor completion outside active run"
+            );
+        }
+        let bridge_phase_executor_run_entry_count_state =
+            bridge_phase_executor_state.entry_count_state();
+        let bridge_phase_executor_run_entry_count =
+            bridge_phase_executor_run_entry_count_state.count();
+        if bridge_phase_executor_run_entry_count
+            != QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_ACTIVE_ENTRY_COUNT
+                .count()
+        {
+            anyhow::bail!(
+                "resident dense apply sequence bridge phase executor entry count {} at completion",
+                bridge_phase_executor_run_entry_count
+            );
+        }
+        let bridge_loop_phase_cursor_state = bridge_loop_cursor_state.phase_index_state();
+        let bridge_loop_phase_cursor = bridge_loop_phase_cursor_state.index();
+        let bridge_loop_phase_count_state = bridge_phase_executor_run_body_plan.phase_count_state();
+        let bridge_loop_phase_count = bridge_loop_phase_count_state.count();
+        let bridge_loop_gate_count_state = bridge_phase_executor_run_body_plan.gate_count_state();
+        let bridge_loop_gate_count = bridge_loop_gate_count_state.count();
+        let sequence_loop_controller_cursor_state = sequence_loop_controller_state.cursor_state();
+        let sequence_loop_controller_cursor = sequence_loop_controller_cursor_state.index();
+        let sequence_loop_ready_step_count_state =
+            sequence_loop_controller_state.ready_step_count_state();
+        let sequence_loop_ready_step_count_value = sequence_loop_ready_step_count_state.count();
+        let sequence_loop_controller_step_count_state =
+            sequence_loop_controller_state.step_count_state();
+        let sequence_loop_controller_step_count = sequence_loop_controller_step_count_state.count();
+        let bridge_checkpoint_gate_readiness_cursor_state =
+            bridge_loop_cursor_state.checkpoint_gate_readiness_cursor_state();
+        let bridge_checkpoint_gate_readiness_cursor_value =
+            bridge_checkpoint_gate_readiness_cursor_state.index();
+        let bridge_checkpoint_gate_readiness_row_count_state =
+            bridge_phase_executor_run_body_plan.checkpoint_gate_readiness_row_count_state();
+        let bridge_checkpoint_gate_readiness_row_count =
+            bridge_checkpoint_gate_readiness_row_count_state.count();
+        if bridge_loop_phase_cursor != bridge_loop_phase_count {
+            anyhow::bail!(
+                "resident dense apply sequence bridge phase executor consumed {} phases, expected {}",
+                bridge_loop_phase_cursor,
+                bridge_loop_phase_count
+            );
+        }
+        if bridge_loop_phase_cursor != bridge_loop_gate_count {
+            anyhow::bail!(
+                "resident dense apply sequence bridge phase executor consumed {} gate rows, expected {}",
+                bridge_loop_phase_cursor,
+                bridge_loop_gate_count
+            );
+        }
+        if sequence_loop_controller_cursor != sequence_loop_controller_step_count {
+            anyhow::bail!(
+                "resident dense apply sequence controller consumed {} steps, expected {}",
+                sequence_loop_controller_cursor,
+                sequence_loop_controller_step_count
+            );
+        }
+        if sequence_loop_ready_step_count_value != sequence_loop_controller_step_count {
+            anyhow::bail!(
+                "resident dense apply sequence ready count {} did not reach step count {}",
+                sequence_loop_ready_step_count_value,
+                sequence_loop_controller_step_count
+            );
+        }
+        if bridge_checkpoint_gate_readiness_cursor_value
+            != bridge_checkpoint_gate_readiness_row_count
+        {
+            anyhow::bail!(
+                "resident dense apply sequence bridge checkpoint readiness cursor consumed {} rows, expected {}",
+                bridge_checkpoint_gate_readiness_cursor_value,
+                bridge_checkpoint_gate_readiness_row_count
+            );
+        }
+        bridge_phase_executor_state.set_active(
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_COMPLETE_ACTIVE_STATE,
+        );
+        println!("  resident_layer_runner_dense_apply_sequence_bridge_loop_phase_executor_complete_stage:");
+        println!("    source: main_dense_apply_sequence_bridge_loop_phase_executor_complete");
+        println!("    sequence_loop_bridge_phase_cursor_final: {bridge_loop_phase_cursor}");
+        println!("    sequence_loop_bridge_phase_count: {bridge_loop_phase_count}");
+        println!("    sequence_loop_bridge_gate_count: {bridge_loop_gate_count}");
+        println!("    sequence_loop_controller_cursor_final: {sequence_loop_controller_cursor}");
+        println!(
+            "    sequence_loop_controller_ready_step_count_final: {sequence_loop_ready_step_count_value}"
+        );
+        println!(
+            "    sequence_loop_bridge_checkpoint_gate_readiness_cursor_final: {bridge_checkpoint_gate_readiness_cursor_value}"
+        );
+        println!(
+            "    sequence_loop_bridge_checkpoint_gate_readiness_row_count_final: {bridge_checkpoint_gate_readiness_row_count}"
+        );
+        println!("    sequence_loop_controller_step_count: {sequence_loop_controller_step_count}");
+        let bridge_phase_executor_completion_guard_used_state =
+            bridge_phase_executor_run_body_plan.completion_guard_used_state();
+        let bridge_phase_executor_completion_guard_used =
+            bridge_phase_executor_completion_guard_used_state.satisfied();
+        println!(
+            "    bridge_phase_executor_completion_guard_used: {}",
+            bridge_phase_executor_completion_guard_used
+        );
+        let bridge_phase_executor_run_body_metadata_used_state =
+            bridge_phase_executor_run_body_plan.run_body_metadata_used_state();
+        let bridge_phase_executor_run_body_metadata_used =
+            bridge_phase_executor_run_body_metadata_used_state.used();
+        println!(
+            "    bridge_phase_executor_run_body_metadata_used: {}",
+            bridge_phase_executor_run_body_metadata_used
+        );
+        let bridge_phase_executor_completion_counts_from_run_body_plan_state =
+            bridge_phase_executor_run_body_plan.completion_counts_from_run_body_plan_state();
+        let bridge_phase_executor_completion_counts_from_run_body_plan =
+            bridge_phase_executor_completion_counts_from_run_body_plan_state
+                .sourced_from_run_body_plan();
+        println!(
+            "    bridge_phase_executor_completion_counts_from_run_body_plan: {}",
+            bridge_phase_executor_completion_counts_from_run_body_plan
+        );
+        let bridge_phase_executor_consumed_all_phase_rows_state =
+            bridge_phase_executor_run_body_plan.consumed_all_phase_rows_state();
+        let bridge_phase_executor_consumed_all_phase_rows =
+            bridge_phase_executor_consumed_all_phase_rows_state.satisfied();
+        println!(
+            "    bridge_phase_executor_consumed_all_phase_rows: {}",
+            bridge_phase_executor_consumed_all_phase_rows
+        );
+        let bridge_phase_executor_consumed_all_gate_rows_state =
+            bridge_phase_executor_run_body_plan.consumed_all_gate_rows_state();
+        let bridge_phase_executor_consumed_all_gate_rows =
+            bridge_phase_executor_consumed_all_gate_rows_state.satisfied();
+        println!(
+            "    bridge_phase_executor_consumed_all_gate_rows: {}",
+            bridge_phase_executor_consumed_all_gate_rows
+        );
+        let bridge_phase_executor_consumed_all_checkpoint_gate_readiness_rows_state =
+            bridge_phase_executor_run_body_plan.consumed_all_checkpoint_gate_readiness_rows_state();
+        let bridge_phase_executor_consumed_all_checkpoint_gate_readiness_rows =
+            bridge_phase_executor_consumed_all_checkpoint_gate_readiness_rows_state.satisfied();
+        println!(
+            "    bridge_phase_executor_consumed_all_checkpoint_gate_readiness_rows: {}",
+            bridge_phase_executor_consumed_all_checkpoint_gate_readiness_rows
+        );
+        let bridge_phase_executor_step_cursor_reached_step_count_state =
+            bridge_phase_executor_run_body_plan.step_cursor_reached_step_count_state();
+        let bridge_phase_executor_step_cursor_reached_step_count =
+            bridge_phase_executor_step_cursor_reached_step_count_state.satisfied();
+        println!(
+            "    bridge_phase_executor_step_cursor_reached_step_count: {}",
+            bridge_phase_executor_step_cursor_reached_step_count
+        );
+        let bridge_phase_executor_ready_count_reached_step_count_state =
+            bridge_phase_executor_run_body_plan.ready_count_reached_step_count_state();
+        let bridge_phase_executor_ready_count_reached_step_count =
+            bridge_phase_executor_ready_count_reached_step_count_state.satisfied();
+        println!(
+            "    bridge_phase_executor_ready_count_reached_step_count: {}",
+            bridge_phase_executor_ready_count_reached_step_count
+        );
+        let bridge_phase_executor_enclosing_run_used_state =
+            bridge_phase_executor_run_body_plan.enclosing_run_used_state();
+        let bridge_phase_executor_enclosing_run_used =
+            bridge_phase_executor_enclosing_run_used_state.used();
+        println!(
+            "    bridge_phase_executor_enclosing_run_used: {}",
+            bridge_phase_executor_enclosing_run_used
+        );
+        let bridge_phase_executor_enclosing_run_closed_state =
+            bridge_phase_executor_run_body_plan.enclosing_run_closed_state();
+        let bridge_phase_executor_enclosing_run_closed =
+            bridge_phase_executor_enclosing_run_closed_state.closed();
+        println!(
+            "    bridge_phase_executor_enclosing_run_closed: {}",
+            bridge_phase_executor_enclosing_run_closed
+        );
+        let bridge_phase_executor_single_run_entry_state =
+            bridge_phase_executor_run_body_plan.single_run_entry_state();
+        let bridge_phase_executor_single_run_entry =
+            bridge_phase_executor_single_run_entry_state.satisfied();
+        println!(
+            "    bridge_phase_executor_single_run_entry: {}",
+            bridge_phase_executor_single_run_entry
+        );
+        let bridge_phase_executor_phase0_checkpoint_body_owned_by_begin_state =
+            bridge_phase_executor_run_body_plan.phase0_checkpoint_body_owned_by_begin_state();
+        let bridge_phase_executor_phase0_checkpoint_body_owned_by_begin =
+            bridge_phase_executor_phase0_checkpoint_body_owned_by_begin_state.owned();
+        println!(
+            "    bridge_phase_executor_phase0_checkpoint_body_owned_by_begin: {}",
+            bridge_phase_executor_phase0_checkpoint_body_owned_by_begin
+        );
+        let bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready_state =
+            bridge_phase_executor_run_body_plan.phase1_checkpoint_body_owned_by_gate_ready_state();
+        let bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready =
+            bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready_state.owned();
+        println!(
+            "    bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready: {}",
+            bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready
+        );
+        let bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready_state =
+            bridge_phase_executor_run_body_plan.phase2_checkpoint_body_owned_by_gate_ready_state();
+        let bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready =
+            bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready_state.owned();
+        println!(
+            "    bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready: {}",
+            bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready
+        );
+        let bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor_state =
+            bridge_phase_executor_run_body_plan
+                .all_checkpoint_bodies_owned_by_phase_executor_state();
+        let bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor =
+            bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor_state
+                .all_checkpoint_bodies_owned_by_phase_executor();
+        println!(
+            "    bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor: {}",
+            bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor
+        );
+        let bridge_phase_executor_indexed_checkpoint_gate_helper_state =
+            bridge_phase_executor_run_body_plan.checkpoint_gate_helper_indexed_state();
+        let bridge_phase_executor_indexed_checkpoint_gate_helper =
+            bridge_phase_executor_indexed_checkpoint_gate_helper_state
+                .indexed_checkpoint_gate_helper_used();
+        println!(
+            "    bridge_phase_executor_indexed_checkpoint_gate_helper_used: {}",
+            bridge_phase_executor_indexed_checkpoint_gate_helper
+        );
+        let bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed_state =
+            bridge_phase_executor_run_body_plan
+                .phase_specific_checkpoint_gate_helpers_removed_state();
+        let bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed =
+            bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed_state
+                .phase_specific_checkpoint_gate_helpers_removed();
+        println!(
+            "    bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed: {}",
+            bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed
+        );
+        let bridge_phase_executor_remaining_interleaved_checkpoint_count_state =
+            bridge_phase_executor_run_body_plan.remaining_interleaved_checkpoint_count_state();
+        let bridge_phase_executor_remaining_interleaved_checkpoint_count =
+            bridge_phase_executor_remaining_interleaved_checkpoint_count_state.count();
+        println!(
+            "    bridge_phase_executor_remaining_interleaved_checkpoint_count_final: {}",
+            bridge_phase_executor_remaining_interleaved_checkpoint_count
+        );
+        let bridge_phase_executor_checkpoint_invocations_remain_interleaved_state =
+            bridge_phase_executor_run_body_plan.checkpoint_invocations_remain_interleaved_state();
+        let bridge_phase_executor_checkpoint_invocations_remain_interleaved =
+            bridge_phase_executor_checkpoint_invocations_remain_interleaved_state
+                .remain_interleaved();
+        println!(
+            "    bridge_phase_executor_checkpoint_invocations_remain_interleaved_final: {}",
+            bridge_phase_executor_checkpoint_invocations_remain_interleaved
+        );
+        println!(
+            "    bridge_phase_executor_run_entry_count_final: {bridge_phase_executor_run_entry_count}"
+        );
+        let bridge_phase_executor_active_after_complete_state =
+            bridge_phase_executor_run_body_plan.active_after_complete_state();
+        let bridge_phase_executor_active_after_complete =
+            bridge_phase_executor_active_after_complete_state.active();
+        println!(
+            "    bridge_phase_executor_active_after_complete: {}",
+            bridge_phase_executor_active_after_complete
+        );
+        let bridge_phase_table_used_state =
+            bridge_phase_executor_run_body_plan.phase_table_used_state();
+        let bridge_phase_table_used = bridge_phase_table_used_state.used();
+        println!("    bridge_phase_table_used: {}", bridge_phase_table_used);
+        let bridge_gate_table_used_state =
+            bridge_phase_executor_run_body_plan.gate_table_used_state();
+        let bridge_gate_table_used = bridge_gate_table_used_state.used();
+        println!("    bridge_gate_table_used: {}", bridge_gate_table_used);
+        let bridge_gates_remain_interleaved_state =
+            bridge_phase_executor_run_body_plan.gates_remain_interleaved_state();
+        let bridge_gates_remain_interleaved =
+            bridge_gates_remain_interleaved_state.remain_interleaved();
+        println!(
+            "    bridge_gates_remain_interleaved: {}",
+            bridge_gates_remain_interleaved
+        );
+        let sequence_loop_started_state =
+            bridge_phase_executor_run_body_plan.sequence_loop_started_state();
+        let sequence_loop_started = sequence_loop_started_state.started();
+        println!("    sequence_loop_started: {}", sequence_loop_started);
+        let execution_path_changed_state =
+            bridge_phase_executor_run_body_plan.execution_path_changed_state();
+        let execution_path_changed = execution_path_changed_state.changed();
+        println!("    execution_path_changed: {}", execution_path_changed);
+        let hip_graph_capture_started_state =
+            bridge_phase_executor_run_body_plan.hip_graph_capture_started_state();
+        let hip_graph_capture_started = hip_graph_capture_started_state.started();
+        println!(
+            "    hip_graph_capture_started: {}",
+            hip_graph_capture_started
+        );
+        Ok(())
+    }
+
+    fn phase_executor_run_body_begin(
+        &self,
+        phase_executor_run_body_begin_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorRunBodyBeginState,
+    ) -> Result<()> {
+        let bridge_phase_executor_run_body_plan_state =
+            phase_executor_run_body_begin_state.bridge_phase_executor_run_body_plan_state();
+        let bridge_phase_executor_run_body_plan =
+            bridge_phase_executor_run_body_plan_state.run_body_plan();
+        println!("  resident_layer_runner_dense_apply_sequence_bridge_loop_phase_executor_run_body_driver_stage:");
+        println!("    source: main_dense_apply_sequence_bridge_loop_phase_executor_run_body_begin");
+        let bridge_loop_phase_count_state = bridge_phase_executor_run_body_plan.phase_count_state();
+        let bridge_loop_phase_count = bridge_loop_phase_count_state.count();
+        let bridge_loop_gate_count_state = bridge_phase_executor_run_body_plan.gate_count_state();
+        let bridge_loop_gate_count = bridge_loop_gate_count_state.count();
+        let bridge_checkpoint_gate_readiness_row_count_state =
+            bridge_phase_executor_run_body_plan.checkpoint_gate_readiness_row_count_state();
+        let bridge_checkpoint_gate_readiness_row_count =
+            bridge_checkpoint_gate_readiness_row_count_state.count();
+        println!("    sequence_loop_bridge_phase_count: {bridge_loop_phase_count}");
+        println!("    sequence_loop_bridge_gate_count: {bridge_loop_gate_count}");
+        println!(
+            "    sequence_loop_bridge_checkpoint_gate_readiness_row_count: {bridge_checkpoint_gate_readiness_row_count}"
+        );
+        let bridge_phase_executor_run_body_metadata_used_state =
+            bridge_phase_executor_run_body_plan.run_body_metadata_used_state();
+        let bridge_phase_executor_run_body_metadata_used =
+            bridge_phase_executor_run_body_metadata_used_state.used();
+        println!(
+            "    bridge_phase_executor_run_body_metadata_used: {}",
+            bridge_phase_executor_run_body_metadata_used
+        );
+        let bridge_phase_executor_run_body_counts_from_tables_state =
+            bridge_phase_executor_run_body_plan.run_body_counts_from_tables_state();
+        let bridge_phase_executor_run_body_counts_from_tables =
+            bridge_phase_executor_run_body_counts_from_tables_state.sourced_from_tables();
+        println!(
+            "    bridge_phase_executor_run_body_counts_from_tables: {}",
+            bridge_phase_executor_run_body_counts_from_tables
+        );
+        let bridge_phase_executor_run_body_driver_used_state =
+            bridge_phase_executor_run_body_plan.run_body_driver_used_state();
+        let bridge_phase_executor_run_body_driver_used =
+            bridge_phase_executor_run_body_driver_used_state.used();
+        println!(
+            "    bridge_phase_executor_run_body_driver_used: {}",
+            bridge_phase_executor_run_body_driver_used
+        );
+        let bridge_phase_executor_begin_owned_by_run_body_driver_state =
+            bridge_phase_executor_run_body_plan.begin_owned_by_run_body_driver_state();
+        let bridge_phase_executor_begin_owned_by_run_body_driver =
+            bridge_phase_executor_begin_owned_by_run_body_driver_state.owned();
+        println!(
+            "    bridge_phase_executor_begin_owned_by_run_body_driver: {}",
+            bridge_phase_executor_begin_owned_by_run_body_driver
+        );
+        let bridge_phase_executor_completion_order_preserved_inside_body_state =
+            bridge_phase_executor_run_body_plan.completion_order_preserved_inside_body_state();
+        let bridge_phase_executor_completion_order_preserved_inside_body =
+            bridge_phase_executor_completion_order_preserved_inside_body_state.preserved();
+        println!(
+            "    bridge_phase_executor_complete_order_preserved_inside_body: {}",
+            bridge_phase_executor_completion_order_preserved_inside_body
+        );
+        let bridge_phase_executor_layer_specific_body_inline_state =
+            bridge_phase_executor_run_body_plan.layer_specific_body_inline_state();
+        let bridge_phase_executor_layer_specific_body_inline =
+            bridge_phase_executor_layer_specific_body_inline_state.inline();
+        println!(
+            "    bridge_phase_executor_layer_specific_body_inline: {}",
+            bridge_phase_executor_layer_specific_body_inline
+        );
+        let bridge_phase_executor_checkpoint_gate_driver_used_state =
+            bridge_phase_executor_run_body_plan.checkpoint_gate_driver_used_state();
+        let bridge_phase_executor_checkpoint_gate_driver_used =
+            bridge_phase_executor_checkpoint_gate_driver_used_state.satisfied();
+        println!(
+            "    bridge_phase_executor_checkpoint_gate_driver_used: {}",
+            bridge_phase_executor_checkpoint_gate_driver_used
+        );
+        let bridge_phase_executor_checkpoint_gate_helper_indexed_state =
+            bridge_phase_executor_run_body_plan.checkpoint_gate_helper_indexed_state();
+        let bridge_phase_executor_checkpoint_gate_helper_indexed =
+            bridge_phase_executor_checkpoint_gate_helper_indexed_state
+                .indexed_checkpoint_gate_helper_used();
+        println!(
+            "    bridge_phase_executor_checkpoint_gate_helper_indexed: {}",
+            bridge_phase_executor_checkpoint_gate_helper_indexed
+        );
+        let bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed_state =
+            bridge_phase_executor_run_body_plan
+                .phase_specific_checkpoint_gate_helpers_removed_state();
+        let bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed =
+            bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed_state
+                .phase_specific_checkpoint_gate_helpers_removed();
+        println!(
+            "    bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed: {}",
+            bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed
+        );
+        let bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor_state =
+            bridge_phase_executor_run_body_plan
+                .all_checkpoint_bodies_owned_by_phase_executor_state();
+        let bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor =
+            bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor_state
+                .all_checkpoint_bodies_owned_by_phase_executor();
+        println!(
+            "    bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor: {}",
+            bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor
+        );
+        let bridge_phase_executor_phase0_checkpoint_body_owned_by_begin_state =
+            bridge_phase_executor_run_body_plan.phase0_checkpoint_body_owned_by_begin_state();
+        let bridge_phase_executor_phase0_checkpoint_body_owned_by_begin =
+            bridge_phase_executor_phase0_checkpoint_body_owned_by_begin_state.owned();
+        println!(
+            "    bridge_phase_executor_phase0_checkpoint_body_owned_by_begin: {}",
+            bridge_phase_executor_phase0_checkpoint_body_owned_by_begin
+        );
+        let bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready_state =
+            bridge_phase_executor_run_body_plan.phase1_checkpoint_body_owned_by_gate_ready_state();
+        let bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready =
+            bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready_state.owned();
+        println!(
+            "    bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready: {}",
+            bridge_phase_executor_phase1_checkpoint_body_owned_by_gate_ready
+        );
+        let bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready_state =
+            bridge_phase_executor_run_body_plan.phase2_checkpoint_body_owned_by_gate_ready_state();
+        let bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready =
+            bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready_state.owned();
+        println!(
+            "    bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready: {}",
+            bridge_phase_executor_phase2_checkpoint_body_owned_by_gate_ready
+        );
+        let bridge_phase_executor_phase0_checkpoint_invocation_moved_into_begin_state =
+            bridge_phase_executor_run_body_plan
+                .phase0_checkpoint_invocation_moved_into_begin_state();
+        let bridge_phase_executor_phase0_checkpoint_invocation_moved_into_begin =
+            bridge_phase_executor_phase0_checkpoint_invocation_moved_into_begin_state
+                .moved_into_begin();
+        println!(
+            "    bridge_phase_executor_phase0_checkpoint_invocation_moved_into_begin: {}",
+            bridge_phase_executor_phase0_checkpoint_invocation_moved_into_begin
+        );
+        let bridge_phase_executor_remaining_interleaved_checkpoint_count_state =
+            bridge_phase_executor_run_body_plan.remaining_interleaved_checkpoint_count_state();
+        let bridge_phase_executor_remaining_interleaved_checkpoint_count =
+            bridge_phase_executor_remaining_interleaved_checkpoint_count_state.count();
+        println!(
+            "    bridge_phase_executor_remaining_interleaved_checkpoint_count: {}",
+            bridge_phase_executor_remaining_interleaved_checkpoint_count
+        );
+        let bridge_phase_executor_checkpoint_invocations_remain_interleaved_state =
+            bridge_phase_executor_run_body_plan.checkpoint_invocations_remain_interleaved_state();
+        let bridge_phase_executor_checkpoint_invocations_remain_interleaved =
+            bridge_phase_executor_checkpoint_invocations_remain_interleaved_state
+                .remain_interleaved();
+        println!(
+            "    bridge_phase_executor_checkpoint_invocations_remain_interleaved: {}",
+            bridge_phase_executor_checkpoint_invocations_remain_interleaved
+        );
+        let bridge_phase_executor_run_body_wrapper_avoided_state =
+            bridge_phase_executor_run_body_plan.body_wrapper_avoided_state();
+        let bridge_phase_executor_run_body_wrapper_avoided =
+            bridge_phase_executor_run_body_wrapper_avoided_state.avoided();
+        println!(
+            "    bridge_phase_executor_run_body_wrapper_avoided: {}",
+            bridge_phase_executor_run_body_wrapper_avoided
+        );
+        let bridge_phase_table_used_state =
+            bridge_phase_executor_run_body_plan.phase_table_used_state();
+        let bridge_phase_table_used = bridge_phase_table_used_state.used();
+        println!("    bridge_phase_table_used: {}", bridge_phase_table_used);
+        let bridge_gate_table_used_state =
+            bridge_phase_executor_run_body_plan.gate_table_used_state();
+        let bridge_gate_table_used = bridge_gate_table_used_state.used();
+        println!("    bridge_gate_table_used: {}", bridge_gate_table_used);
+        let bridge_gates_remain_interleaved_state =
+            bridge_phase_executor_run_body_plan.gates_remain_interleaved_state();
+        let bridge_gates_remain_interleaved =
+            bridge_gates_remain_interleaved_state.remain_interleaved();
+        println!(
+            "    bridge_gates_remain_interleaved: {}",
+            bridge_gates_remain_interleaved
+        );
+        let sequence_loop_started_state =
+            bridge_phase_executor_run_body_plan.sequence_loop_started_state();
+        let sequence_loop_started = sequence_loop_started_state.started();
+        println!("    sequence_loop_started: {}", sequence_loop_started);
+        let execution_path_changed_state =
+            bridge_phase_executor_run_body_plan.execution_path_changed_state();
+        let execution_path_changed = execution_path_changed_state.changed();
+        println!("    execution_path_changed: {}", execution_path_changed);
+        let hip_graph_capture_started_state =
+            bridge_phase_executor_run_body_plan.hip_graph_capture_started_state();
+        let hip_graph_capture_started = hip_graph_capture_started_state.started();
+        println!(
+            "    hip_graph_capture_started: {}",
+            hip_graph_capture_started
+        );
+        Ok(())
+    }
+
+    fn phase_executor_checkpoint_gate_driver(
+        &self,
+        phase_executor_checkpoint_gate_driver_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateDriverState,
+    ) -> Result<()> {
+        let bridge_checkpoint_gate_descriptor =
+            phase_executor_checkpoint_gate_driver_state.bridge_checkpoint_gate_descriptor();
+        let bridge_phase_executor_run_body_plan_state =
+            phase_executor_checkpoint_gate_driver_state.bridge_phase_executor_run_body_plan_state();
+        let bridge_phase_executor_run_body_plan =
+            bridge_phase_executor_run_body_plan_state.run_body_plan();
+        println!("  resident_layer_runner_dense_apply_sequence_bridge_loop_phase_executor_checkpoint_gate_driver_stage:");
+        println!("    source: main_dense_apply_sequence_bridge_loop_phase_executor_next_checkpoint_gate_ready");
+        println!(
+            "    sequence_loop_bridge_phase_index: {}",
+            bridge_checkpoint_gate_descriptor.phase_index()
+        );
+        println!(
+            "    sequence_loop_bridge_phase_gate_index: {}",
+            bridge_checkpoint_gate_descriptor.gate_index()
+        );
+        let bridge_checkpoint_gate_readiness_cursor_used_state =
+            bridge_phase_executor_run_body_plan.checkpoint_gate_readiness_cursor_used_state();
+        let bridge_checkpoint_gate_readiness_cursor_used =
+            bridge_checkpoint_gate_readiness_cursor_used_state.satisfied();
+        println!(
+            "    bridge_checkpoint_gate_readiness_cursor_used: {}",
+            bridge_checkpoint_gate_readiness_cursor_used
+        );
+        let bridge_checkpoint_gate_construction_table_driven_state =
+            bridge_phase_executor_run_body_plan.checkpoint_gate_construction_table_driven_state();
+        let bridge_checkpoint_gate_construction_table_driven =
+            bridge_checkpoint_gate_construction_table_driven_state.satisfied();
+        println!(
+            "    bridge_checkpoint_gate_construction_table_driven: {}",
+            bridge_checkpoint_gate_construction_table_driven
+        );
+        let bridge_phase_executor_run_body_metadata_used_state =
+            bridge_phase_executor_run_body_plan.run_body_metadata_used_state();
+        let bridge_phase_executor_run_body_metadata_used =
+            bridge_phase_executor_run_body_metadata_used_state.used();
+        println!(
+            "    bridge_phase_executor_run_body_metadata_used: {}",
+            bridge_phase_executor_run_body_metadata_used
+        );
+        let bridge_phase_executor_checkpoint_phase_count_from_run_body_plan_state =
+            bridge_phase_executor_run_body_plan.checkpoint_phase_count_from_run_body_plan_state();
+        let bridge_phase_executor_checkpoint_phase_count_from_run_body_plan =
+            bridge_phase_executor_checkpoint_phase_count_from_run_body_plan_state
+                .sourced_from_run_body_plan();
+        println!(
+            "    bridge_phase_executor_checkpoint_phase_count_from_run_body_plan: {}",
+            bridge_phase_executor_checkpoint_phase_count_from_run_body_plan
+        );
+        let bridge_phase_executor_checkpoint_gate_driver_used_state =
+            bridge_phase_executor_run_body_plan.checkpoint_gate_driver_used_state();
+        let bridge_phase_executor_checkpoint_gate_driver_used =
+            bridge_phase_executor_checkpoint_gate_driver_used_state.satisfied();
+        println!(
+            "    bridge_phase_executor_checkpoint_gate_driver_used: {}",
+            bridge_phase_executor_checkpoint_gate_driver_used
+        );
+        let bridge_phase_executor_indexed_checkpoint_gate_helper_state =
+            bridge_phase_executor_run_body_plan.checkpoint_gate_helper_indexed_state();
+        let bridge_phase_executor_indexed_checkpoint_gate_helper =
+            bridge_phase_executor_indexed_checkpoint_gate_helper_state
+                .indexed_checkpoint_gate_helper_used();
+        println!(
+            "    bridge_phase_executor_indexed_checkpoint_gate_helper_used: {}",
+            bridge_phase_executor_indexed_checkpoint_gate_helper
+        );
+        let explicit_checkpoint_gate_builder_literals_removed_state =
+            bridge_phase_executor_run_body_plan
+                .explicit_checkpoint_gate_builder_literals_removed_state();
+        let explicit_checkpoint_gate_builder_literals_removed =
+            explicit_checkpoint_gate_builder_literals_removed_state.satisfied();
+        println!(
+            "    explicit_checkpoint_gate_builder_literals_removed: {}",
+            explicit_checkpoint_gate_builder_literals_removed
+        );
+        let bridge_gates_remain_interleaved_state =
+            bridge_phase_executor_run_body_plan.gates_remain_interleaved_state();
+        let bridge_gates_remain_interleaved =
+            bridge_gates_remain_interleaved_state.remain_interleaved();
+        println!(
+            "    bridge_gates_remain_interleaved: {}",
+            bridge_gates_remain_interleaved
+        );
+        let sequence_loop_started_state =
+            bridge_phase_executor_run_body_plan.sequence_loop_started_state();
+        let sequence_loop_started = sequence_loop_started_state.started();
+        println!("    sequence_loop_started: {}", sequence_loop_started);
+        let execution_path_changed_state =
+            bridge_phase_executor_run_body_plan.execution_path_changed_state();
+        let execution_path_changed = execution_path_changed_state.changed();
+        println!("    execution_path_changed: {}", execution_path_changed);
+        let hip_graph_capture_started_state =
+            bridge_phase_executor_run_body_plan.hip_graph_capture_started_state();
+        let hip_graph_capture_started = hip_graph_capture_started_state.started();
+        println!(
+            "    hip_graph_capture_started: {}",
+            hip_graph_capture_started
+        );
+        Ok(())
+    }
+
+    fn phase_executor_checkpoint_gate_ready_driver(
+        &self,
+        phase_executor_checkpoint_gate_ready_driver_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyDriverState,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState> {
+        let bridge_checkpoint_gate_ready =
+            phase_executor_checkpoint_gate_ready_driver_state.bridge_checkpoint_gate_ready();
+        let bridge_phase_executor_run_body_plan_state =
+            phase_executor_checkpoint_gate_ready_driver_state
+                .bridge_phase_executor_run_body_plan_state();
+        let bridge_checkpoint_gate_ready_state =
+            bridge_checkpoint_gate_ready.bridge_checkpoint_gate_ready_state();
+        if bridge_checkpoint_gate_ready_state.ready() {
+            self.phase_executor_checkpoint_gate_driver(
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateDriverState::from_parts_state(
+                    bridge_checkpoint_gate_ready.bridge_checkpoint_gate_descriptor,
+                    bridge_phase_executor_run_body_plan_state,
+                ),
+            )?;
+        }
+        Ok(bridge_checkpoint_gate_ready_state)
+    }
+
+    fn phase_executor_checkpoint_gate_ready_stage(
+        &self,
+        phase_executor_checkpoint_gate_ready_stage_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyStageState,
+    ) -> Result<()> {
+        let bridge_checkpoint_gate_descriptor =
+            phase_executor_checkpoint_gate_ready_stage_state.bridge_checkpoint_gate_descriptor();
+        let bridge_phase_executor_run_body_plan_state =
+            phase_executor_checkpoint_gate_ready_stage_state
+                .bridge_phase_executor_run_body_plan_state();
+        let bridge_phase_executor_run_body_plan =
+            bridge_phase_executor_run_body_plan_state.run_body_plan();
+        let bridge_phase_executor_phase2_pre_checkpoint_prepare_preserved =
+            phase_executor_checkpoint_gate_ready_stage_state
+                .bridge_phase_executor_phase2_pre_checkpoint_prepare_preserved();
+        println!("  resident_layer_runner_dense_apply_sequence_bridge_loop_phase_executor_checkpoint_gate_stage:");
+        println!("    source: main_dense_apply_sequence_bridge_loop_phase_executor_checkpoint_gate_ready");
+        println!(
+            "    sequence_loop_bridge_phase_index: {}",
+            bridge_checkpoint_gate_descriptor.phase_index()
+        );
+        println!(
+            "    sequence_loop_bridge_phase_gate_index: {}",
+            bridge_checkpoint_gate_descriptor.gate_index()
+        );
+        let bridge_phase_executor_run_body_metadata_used_state =
+            bridge_phase_executor_run_body_plan.run_body_metadata_used_state();
+        let bridge_phase_executor_run_body_metadata_used =
+            bridge_phase_executor_run_body_metadata_used_state.used();
+        println!(
+            "    bridge_phase_executor_run_body_metadata_used: {}",
+            bridge_phase_executor_run_body_metadata_used
+        );
+        let bridge_phase_executor_checkpoint_phase_count_from_run_body_plan_state =
+            bridge_phase_executor_run_body_plan.checkpoint_phase_count_from_run_body_plan_state();
+        let bridge_phase_executor_checkpoint_phase_count_from_run_body_plan =
+            bridge_phase_executor_checkpoint_phase_count_from_run_body_plan_state
+                .sourced_from_run_body_plan();
+        println!(
+            "    bridge_phase_executor_checkpoint_phase_count_from_run_body_plan: {}",
+            bridge_phase_executor_checkpoint_phase_count_from_run_body_plan
+        );
+        let bridge_phase_executor_checkpoint_gate_helper_indexed_state =
+            bridge_phase_executor_run_body_plan.checkpoint_gate_helper_indexed_state();
+        let bridge_phase_executor_checkpoint_gate_helper_indexed =
+            bridge_phase_executor_checkpoint_gate_helper_indexed_state
+                .indexed_checkpoint_gate_helper_used();
+        println!(
+            "    bridge_phase_executor_checkpoint_gate_helper_indexed: {}",
+            bridge_phase_executor_checkpoint_gate_helper_indexed
+        );
+        let bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed_state =
+            bridge_phase_executor_run_body_plan
+                .phase_specific_checkpoint_gate_helpers_removed_state();
+        let bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed =
+            bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed_state
+                .phase_specific_checkpoint_gate_helpers_removed();
+        println!(
+            "    bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed: {}",
+            bridge_phase_executor_phase_specific_checkpoint_gate_helpers_removed
+        );
+        println!(
+            "    bridge_phase_executor_phase2_pre_checkpoint_prepare_preserved: {}",
+            bridge_phase_executor_phase2_pre_checkpoint_prepare_preserved
+                .phase2_pre_checkpoint_prepare_preserved()
+        );
+        let bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor_state =
+            bridge_phase_executor_run_body_plan
+                .all_checkpoint_bodies_owned_by_phase_executor_state();
+        let bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor =
+            bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor_state
+                .all_checkpoint_bodies_owned_by_phase_executor();
+        println!(
+            "    bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor: {}",
+            bridge_phase_executor_all_checkpoint_bodies_owned_by_phase_executor
+        );
+        println!(
+            "    bridge_phase_executor_checkpoint_invocation_source: {}",
+            bridge_phase_executor_run_body_plan
+                .checkpoint_gate_invocation_source_state()
+                .label()
+        );
+        let bridge_phase_executor_remaining_interleaved_checkpoint_count_state =
+            bridge_phase_executor_run_body_plan.remaining_interleaved_checkpoint_count_state();
+        let bridge_phase_executor_remaining_interleaved_checkpoint_count =
+            bridge_phase_executor_remaining_interleaved_checkpoint_count_state.count();
+        println!(
+            "    bridge_phase_executor_remaining_interleaved_checkpoint_count: {}",
+            bridge_phase_executor_remaining_interleaved_checkpoint_count
+        );
+        let bridge_gates_remain_interleaved_state =
+            bridge_phase_executor_run_body_plan.gates_remain_interleaved_state();
+        let bridge_gates_remain_interleaved =
+            bridge_gates_remain_interleaved_state.remain_interleaved();
+        println!(
+            "    bridge_gates_remain_interleaved: {}",
+            bridge_gates_remain_interleaved
+        );
+        let sequence_loop_started_state =
+            bridge_phase_executor_run_body_plan.sequence_loop_started_state();
+        let sequence_loop_started = sequence_loop_started_state.started();
+        println!("    sequence_loop_started: {}", sequence_loop_started);
+        let execution_path_changed_state =
+            bridge_phase_executor_run_body_plan.execution_path_changed_state();
+        let execution_path_changed = execution_path_changed_state.changed();
+        println!("    execution_path_changed: {}", execution_path_changed);
+        let hip_graph_capture_started_state =
+            bridge_phase_executor_run_body_plan.hip_graph_capture_started_state();
+        let hip_graph_capture_started = hip_graph_capture_started_state.started();
+        println!(
+            "    hip_graph_capture_started: {}",
+            hip_graph_capture_started
+        );
+        Ok(())
+    }
+
+    fn phase_executor_checkpoint_gate_ready_complete(
+        &self,
+        phase_executor_checkpoint_gate_ready_complete_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyCompleteState,
+    ) -> Result<()> {
+        let bridge_checkpoint_gate_ready =
+            phase_executor_checkpoint_gate_ready_complete_state.bridge_checkpoint_gate_ready();
+        let bridge_phase_executor_run_body_plan_state =
+            phase_executor_checkpoint_gate_ready_complete_state
+                .bridge_phase_executor_run_body_plan_state();
+        let bridge_phase_executor_run_body_plan =
+            bridge_phase_executor_run_body_plan_state.run_body_plan();
+        let bridge_phase2_pre_checkpoint_prepare_phase_index_state =
+            bridge_phase_executor_run_body_plan
+                .phase2_pre_checkpoint_prepare_phase_index_state()
+                .phase_index_state();
+        let bridge_phase2_pre_checkpoint_prepare_phase_index =
+            bridge_phase2_pre_checkpoint_prepare_phase_index_state.index();
+        let bridge_phase_executor_phase2_pre_checkpoint_prepare_preserved =
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhase2PreCheckpointPreparePreservationState::from_preserved(
+                bridge_checkpoint_gate_ready
+                    .bridge_checkpoint_gate_descriptor
+                    .phase_index()
+                    == bridge_phase2_pre_checkpoint_prepare_phase_index,
+            );
+        self.phase_executor_checkpoint_gate_ready_stage(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyStageState::from_parts_state(
+                bridge_checkpoint_gate_ready.bridge_checkpoint_gate_descriptor,
+                bridge_phase_executor_run_body_plan_state,
+                bridge_phase_executor_phase2_pre_checkpoint_prepare_preserved,
+            ),
+        )
+    }
+
+    fn phase_executor_checkpoint_gate_ready(
+        &self,
+        phase_executor_checkpoint_gate_ready_lookup_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyLookupState,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReady>
+    {
+        let bridge_checkpoint_gate =
+            phase_executor_checkpoint_gate_ready_lookup_state.bridge_checkpoint_gate();
+        let bridge_checkpoint_gate_descriptor = bridge_checkpoint_gate.gate_descriptor;
+        let bridge_checkpoint_gate_index = bridge_checkpoint_gate_descriptor.gate_index();
+        let bridge_checkpoint_phase_index = bridge_checkpoint_gate_descriptor.phase_index();
+        if bridge_checkpoint_gate_index
+            == QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_INDEX
+        {
+            anyhow::bail!(
+                "resident dense apply sequence bridge checkpoint helper received run-context gate {}",
+                bridge_checkpoint_gate_index
+            );
+        }
+        if bridge_checkpoint_gate_index != bridge_checkpoint_phase_index {
+            anyhow::bail!(
+                "resident dense apply sequence bridge checkpoint helper received gate {} for phase {}",
+                bridge_checkpoint_gate_index,
+                bridge_checkpoint_phase_index
+            );
+        }
+        let bridge_checkpoint_gate_ready_step =
+            self.checkpoint_gate_ready_step(
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStepLookupState::from_checkpoint_gate(
+                    bridge_checkpoint_gate,
+                ),
+            )?;
+        Ok(self.phase_executor_checkpoint_gate_ready_from_step(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyFromStepState::from_step(
+                bridge_checkpoint_gate_ready_step,
+            ),
+        ))
+    }
+
+    fn phase_executor_checkpoint_gate_ready_from_step(
+        &self,
+        phase_executor_checkpoint_gate_ready_from_step_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReadyFromStepState,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReady {
+        let bridge_checkpoint_gate_ready_step =
+            phase_executor_checkpoint_gate_ready_from_step_state
+                .bridge_checkpoint_gate_ready_step();
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseExecutorCheckpointGateReady::new(
+            bridge_checkpoint_gate_ready_step
+                .checkpoint_gate
+                .gate_descriptor,
+            bridge_checkpoint_gate_ready_step.checkpoint_gate_ready_state(),
+        )
+    }
+
+    fn gate_descriptor(
+        &self,
+        gate_descriptor_lookup_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateDescriptorLookupState,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGate> {
+        let bridge_gate_index = gate_descriptor_lookup_state.bridge_gate_index();
+        let bridge_gate_count_state = self.gate_count_state();
+        let bridge_gate_count = bridge_gate_count_state.count();
+        let bridge_loop_gate = self
+            .gates()
+            .get(bridge_gate_index)
+            .copied()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "resident dense apply sequence bridge gate {} outside gate count {}",
+                    bridge_gate_index,
+                    bridge_gate_count
+                )
+            })?;
+        if bridge_loop_gate.gate_index() != bridge_gate_index {
+            anyhow::bail!(
+                "resident dense apply sequence bridge gate table index {} found descriptor gate {}",
+                bridge_gate_index,
+                bridge_loop_gate.gate_index()
+            );
+        }
+        let bridge_loop_phase = self.phase_descriptor_from_gate_descriptor(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseDescriptorFromGateDescriptorState::from_parts(
+                bridge_gate_index,
+                bridge_loop_gate,
+            ),
+        )?;
+        if bridge_loop_phase.phase_index() != bridge_loop_gate.phase_index() {
+            anyhow::bail!(
+                "resident dense apply sequence bridge gate {} phase {} found descriptor phase {}",
+                bridge_gate_index,
+                bridge_loop_gate.phase_index(),
+                bridge_loop_phase.phase_index()
+            );
+        }
+        if bridge_loop_phase.bridge_role != bridge_loop_gate.phase_role {
+            anyhow::bail!(
+                "resident dense apply sequence bridge gate {} phase role {} does not match phase table role {}",
+                bridge_gate_index,
+                bridge_loop_gate.phase_role,
+                bridge_loop_phase.bridge_role
+            );
+        }
+        Ok(bridge_loop_gate)
+    }
+
+    fn validate_gate_phase_tables(&self) -> Result<()> {
+        let bridge_gate_count_state = self.gate_count_state();
+        let bridge_gate_count = bridge_gate_count_state.count();
+        let bridge_phase_count_state = self.phase_count_state();
+        let bridge_phase_count = bridge_phase_count_state.count();
+        if bridge_gate_count != bridge_phase_count {
+            anyhow::bail!(
+                "resident dense apply sequence bridge gate count {} does not match phase count {}",
+                bridge_gate_count,
+                bridge_phase_count
+            );
+        }
+        for (bridge_loop_gate_table_index, bridge_loop_gate_descriptor) in
+            self.gates().iter().copied().enumerate()
+        {
+            if bridge_loop_gate_descriptor.gate_index() != bridge_loop_gate_table_index {
+                anyhow::bail!(
+                    "resident dense apply sequence bridge gate table index {} found descriptor gate {}",
+                    bridge_loop_gate_table_index,
+                    bridge_loop_gate_descriptor.gate_index()
+                );
+            }
+            if bridge_loop_gate_descriptor.gate_index()
+                == QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_INDEX
+            {
+                let bridge_loop_gate_controls_bridge_run_context_state =
+                    bridge_loop_gate_descriptor.controls_bridge_run_context_state();
+                let bridge_loop_gate_controls_bridge_run_context =
+                    bridge_loop_gate_controls_bridge_run_context_state.controls();
+                if !bridge_loop_gate_controls_bridge_run_context {
+                    anyhow::bail!(
+                        "resident dense apply sequence bridge gate {} does not control the bridge run context",
+                        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_INDEX
+                    );
+                }
+                let bridge_loop_gate_controls_checkpoint_invocation_state =
+                    bridge_loop_gate_descriptor.controls_checkpoint_invocation_state();
+                let bridge_loop_gate_controls_checkpoint_invocation =
+                    bridge_loop_gate_controls_checkpoint_invocation_state.controls();
+                if bridge_loop_gate_controls_checkpoint_invocation {
+                    anyhow::bail!(
+                        "resident dense apply sequence bridge gate {} is a run-context gate, not an interleaved checkpoint gate",
+                        QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_INDEX
+                    );
+                }
+            } else {
+                let bridge_loop_gate_controls_bridge_run_context_state =
+                    bridge_loop_gate_descriptor.controls_bridge_run_context_state();
+                let bridge_loop_gate_controls_bridge_run_context =
+                    bridge_loop_gate_controls_bridge_run_context_state.controls();
+                if bridge_loop_gate_controls_bridge_run_context {
+                    anyhow::bail!(
+                        "resident dense apply sequence bridge checkpoint gate {} unexpectedly controls the bridge run context",
+                        bridge_loop_gate_descriptor.gate_index()
+                    );
+                }
+                let bridge_loop_gate_controls_checkpoint_invocation_state =
+                    bridge_loop_gate_descriptor.controls_checkpoint_invocation_state();
+                let bridge_loop_gate_controls_checkpoint_invocation =
+                    bridge_loop_gate_controls_checkpoint_invocation_state.controls();
+                if !bridge_loop_gate_controls_checkpoint_invocation {
+                    anyhow::bail!(
+                        "resident dense apply sequence bridge checkpoint gate {} does not control a checkpoint invocation",
+                        bridge_loop_gate_descriptor.gate_index()
+                    );
+                }
+            }
+            let bridge_loop_phase = self.phase_descriptor_from_gate_descriptor(
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseDescriptorFromGateDescriptorState::from_parts(
+                    bridge_loop_gate_descriptor.gate_index(),
+                    bridge_loop_gate_descriptor,
+                ),
+            )?;
+            if bridge_loop_phase.bridge_role != bridge_loop_gate_descriptor.phase_role {
+                anyhow::bail!(
+                    "resident dense apply sequence bridge gate {} phase role {} does not match phase table role {}",
+                    bridge_loop_gate_descriptor.gate_index(),
+                    bridge_loop_gate_descriptor.phase_role,
+                    bridge_loop_phase.bridge_role
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn run_gate(&self) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGate> {
+        let bridge_run_gate_descriptor = self.gate_descriptor(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopGateDescriptorLookupState::from_index(
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_RUN_GATE_INDEX,
+            ),
+        )?;
+        Ok(self.run_gate_from_descriptor(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateFromDescriptorState::from_descriptor(
+                bridge_run_gate_descriptor,
+            ),
+        ))
+    }
+
+    fn run_gate_from_descriptor(
+        &self,
+        run_gate_from_descriptor_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGateFromDescriptorState,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGate {
+        let bridge_run_gate_descriptor =
+            run_gate_from_descriptor_state.bridge_run_gate_descriptor();
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGate::new(
+            bridge_run_gate_descriptor,
+            self.run_gate_plan_ready,
+        )
+    }
+
+    fn run_gate_ready(
+        &self,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopRunGatePlanStageReadyState> {
+        let bridge_loop_run_gate = self.run_gate()?;
+        let bridge_run_gate_plan_ready = bridge_loop_run_gate.run_gate_plan_ready();
+        let bridge_run_gate_stage_ready = bridge_run_gate_plan_ready.stage_ready_state();
+        if bridge_run_gate_stage_ready.ready() {
+            if !bridge_loop_run_gate
+                .gate_descriptor
+                .controls_bridge_run_context_state()
+                .controls()
+            {
+                anyhow::bail!(
+                    "resident dense apply sequence bridge run gate {} does not control bridge context",
+                    bridge_loop_run_gate.gate_descriptor.gate_index()
+                );
+            }
+            let bridge_run_gate_output_rank_count_state =
+                bridge_run_gate_plan_ready.output_rank_count_state();
+            let bridge_run_gate_output_rank_count = bridge_run_gate_output_rank_count_state.count();
+            let bridge_run_gate_expected_rank_count_state =
+                bridge_run_gate_plan_ready.expected_rank_count_state();
+            let bridge_run_gate_expected_rank_count =
+                bridge_run_gate_expected_rank_count_state.count();
+            if bridge_run_gate_output_rank_count != bridge_run_gate_expected_rank_count {
+                anyhow::bail!(
+                    "resident dense apply sequence bridge run gate output ranks {} do not match TP world {}",
+                    bridge_run_gate_output_rank_count,
+                    bridge_run_gate_expected_rank_count
+                );
+            }
+            self.validate_gate_phase_tables()?;
+            self.gate_table_stage()?;
+            self.run_gate_stage(bridge_loop_run_gate)?;
+            self.checkpoint_gate_readiness_table_stage()?;
+        }
+        Ok(bridge_run_gate_stage_ready)
+    }
+
+    fn with_ready_run_gate<R>(&self, run_bridge_loop: R) -> Result<()>
+    where
+        R: QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyRunGate<'a>,
+    {
+        if self.run_gate_ready()?.ready() {
+            run_bridge_loop.run(self)?;
+        }
+        Ok(())
+    }
+
+    fn ready_run_gate_run_body_adapter<F>(
+        run_bridge_body: F,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyRunGateRunBodyAdapter<F>
+    where
+        F: DenseApplySequenceBridgeLoopRunBody,
+    {
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopReadyRunGateRunBodyAdapter::new(
+            run_bridge_body,
+        )
+    }
+
+    fn with_ready_phase_executor_run_body<F>(&self, run_bridge_body: F) -> Result<()>
+    where
+        F: DenseApplySequenceBridgeLoopRunBody,
+    {
+        let run_bridge_loop = Self::ready_run_gate_run_body_adapter(run_bridge_body);
+        self.with_ready_run_gate(run_bridge_loop)
+    }
+
+    fn checkpoint_gate_from_readiness_row(
+        &self,
+        checkpoint_gate_from_readiness_row_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateFromReadinessRowState,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate> {
+        let bridge_checkpoint_gate_readiness =
+            checkpoint_gate_from_readiness_row_state.bridge_checkpoint_gate_readiness();
+        let bridge_checkpoint_gate_descriptor = bridge_checkpoint_gate_readiness.gate_descriptor;
+        let bridge_gate_index = bridge_checkpoint_gate_descriptor.gate_index();
+        let bridge_checkpoint_gate_controls_checkpoint_invocation_state =
+            bridge_checkpoint_gate_descriptor.controls_checkpoint_invocation_state();
+        let bridge_checkpoint_gate_controls_checkpoint_invocation =
+            bridge_checkpoint_gate_controls_checkpoint_invocation_state.controls();
+        if !bridge_checkpoint_gate_controls_checkpoint_invocation {
+            anyhow::bail!(
+                "resident dense apply sequence bridge checkpoint gate readiness row {} does not target a checkpoint gate",
+                bridge_gate_index
+            );
+        }
+        println!("  resident_layer_runner_dense_apply_sequence_bridge_loop_checkpoint_gate_builder_stage:");
+        println!(
+            "    source: main_dense_apply_sequence_bridge_loop_checkpoint_gate_from_readiness_row"
+        );
+        println!("    sequence_loop_bridge_checkpoint_gate_index: {bridge_gate_index}");
+        println!(
+            "    bridge_checkpoint_gate_readiness_table_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READINESS_TABLE_USED
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_construction_table_driven: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_CONSTRUCTION_TABLE_DRIVEN
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_descriptor_derived_from_gate_table: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_DESCRIPTOR_DERIVED_FROM_GATE_TABLE
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_readiness_row_owns_gate_descriptor: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READINESS_ROW_OWNS_GATE_DESCRIPTOR
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_built_from_readiness_row: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_BUILT_FROM_READINESS_ROW
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_built_from_readiness_cursor_step: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_BUILT_FROM_READINESS_CURSOR_STEP
+                .satisfied()
+        );
+        println!(
+            "    bridge_phase_executor_indexed_checkpoint_gate_helper_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_HELPER_INDEXED
+                .indexed_checkpoint_gate_helper_used()
+        );
+        println!(
+            "    bridge_gates_remain_interleaved: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATES_REMAIN_INTERLEAVED
+                .remain_interleaved()
+        );
+        println!(
+            "    sequence_loop_started: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SEQUENCE_LOOP_STARTED
+                .started()
+        );
+        println!(
+            "    execution_path_changed: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_EXECUTION_PATH_CHANGED
+                .changed()
+        );
+        println!(
+            "    hip_graph_capture_started: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_HIP_GRAPH_CAPTURE_STARTED
+                .started()
+        );
+        Ok(self.checkpoint_gate_from_readiness_descriptor(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateFromReadinessDescriptorState::from_parts(
+                bridge_checkpoint_gate_descriptor,
+                bridge_checkpoint_gate_readiness,
+            ),
+        ))
+    }
+
+    fn checkpoint_gate_from_readiness_descriptor(
+        &self,
+        checkpoint_gate_from_readiness_descriptor_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateFromReadinessDescriptorState,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate {
+        let bridge_checkpoint_gate_descriptor =
+            checkpoint_gate_from_readiness_descriptor_state.bridge_checkpoint_gate_descriptor();
+        let bridge_checkpoint_gate_readiness =
+            checkpoint_gate_from_readiness_descriptor_state.bridge_checkpoint_gate_readiness();
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate::new(
+            bridge_checkpoint_gate_descriptor,
+            bridge_checkpoint_gate_readiness.checkpoint_gate_plan_ready(),
+        )
+    }
+
+    fn checkpoint_gate_from_readiness_cursor_step(
+        &self,
+        checkpoint_gate_from_readiness_cursor_step_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateFromReadinessCursorStepState,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate> {
+        let bridge_checkpoint_gate_readiness_cursor_step =
+            checkpoint_gate_from_readiness_cursor_step_state
+                .bridge_checkpoint_gate_readiness_cursor_step();
+        self.checkpoint_gate_from_readiness_row(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateFromReadinessRowState::from_readiness_row(
+                bridge_checkpoint_gate_readiness_cursor_step.checkpoint_gate_readiness,
+            ),
+        )
+    }
+
+    fn next_checkpoint_gate_from_readiness_table(
+        &self,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGate> {
+        let bridge_checkpoint_gate_readiness_cursor_step =
+            self.next_checkpoint_gate_readiness_cursor_step_from_table()?;
+        self.checkpoint_gate_from_readiness_cursor_step(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateFromReadinessCursorStepState::from_cursor_step(
+                bridge_checkpoint_gate_readiness_cursor_step,
+            ),
+        )
+    }
+
+    fn checkpoint_gate_readiness_row_from_cursor(
+        &self,
+        checkpoint_gate_readiness_row_from_cursor_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowFromCursorState,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadiness> {
+        let bridge_checkpoint_gate_readiness_cursor_state =
+            checkpoint_gate_readiness_row_from_cursor_state
+                .bridge_checkpoint_gate_readiness_cursor();
+        let bridge_checkpoint_gate_readiness_cursor_value =
+            bridge_checkpoint_gate_readiness_cursor_state.index();
+        let bridge_checkpoint_gate_readiness_row_count_state =
+            checkpoint_gate_readiness_row_from_cursor_state
+                .bridge_checkpoint_gate_readiness_row_count();
+        let bridge_checkpoint_gate_readiness_row_count =
+            bridge_checkpoint_gate_readiness_row_count_state.count();
+        self.checkpoint_gate_readiness_rows()
+            .get(bridge_checkpoint_gate_readiness_cursor_value)
+            .copied()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "resident dense apply sequence bridge checkpoint gate readiness cursor {} outside row count {}",
+                    bridge_checkpoint_gate_readiness_cursor_value,
+                    bridge_checkpoint_gate_readiness_row_count
+                )
+            })
+    }
+
+    fn checkpoint_gate_readiness_cursor_step_from_construction_state(
+        &self,
+        checkpoint_gate_readiness_cursor_step_construction_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStepConstructionState,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStep {
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStep::new(
+            checkpoint_gate_readiness_cursor_step_construction_state
+                .bridge_checkpoint_gate_readiness_cursor(),
+            checkpoint_gate_readiness_cursor_step_construction_state
+                .bridge_checkpoint_gate_readiness_row_count(),
+            checkpoint_gate_readiness_cursor_step_construction_state
+                .bridge_checkpoint_gate_readiness(),
+        )
+    }
+
+    fn next_checkpoint_gate_readiness_cursor_step_from_table(
+        &self,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStep>
+    {
+        let bridge_loop_cursor_state = self.cursor_state();
+        let bridge_checkpoint_gate_readiness_cursor_state =
+            bridge_loop_cursor_state.checkpoint_gate_readiness_cursor_state();
+        let bridge_checkpoint_gate_readiness_row_count_state =
+            self.checkpoint_gate_readiness_row_count_state();
+        let bridge_checkpoint_gate_readiness = self.checkpoint_gate_readiness_row_from_cursor(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessRowFromCursorState::from_parts(
+                bridge_checkpoint_gate_readiness_cursor_state,
+                bridge_checkpoint_gate_readiness_row_count_state,
+            ),
+        )?;
+        bridge_loop_cursor_state.advance_checkpoint_gate_readiness_cursor_from_advance_state(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorAdvanceState::from_cursor_advanced_by(
+                bridge_checkpoint_gate_readiness_cursor_state,
+                QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_READINESS_CURSOR_ADVANCE_STEP,
+            ),
+        );
+        let bridge_checkpoint_gate_readiness_cursor_step =
+            self.checkpoint_gate_readiness_cursor_step_from_construction_state(
+                QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadinessCursorStepConstructionState::from_parts(
+                    bridge_checkpoint_gate_readiness_cursor_state,
+                    bridge_checkpoint_gate_readiness_row_count_state,
+                    bridge_checkpoint_gate_readiness,
+                ),
+            );
+        let bridge_checkpoint_gate_readiness_cursor_step_state =
+            bridge_checkpoint_gate_readiness_cursor_step.checkpoint_gate_readiness_cursor_state();
+        let bridge_checkpoint_gate_readiness_cursor_step_value =
+            bridge_checkpoint_gate_readiness_cursor_step_state.index();
+        println!("  resident_layer_runner_dense_apply_sequence_bridge_loop_checkpoint_gate_readiness_cursor_stage:");
+        println!("    source: main_dense_apply_sequence_bridge_loop_next_checkpoint_gate_from_readiness_table");
+        println!(
+            "    sequence_loop_bridge_checkpoint_gate_readiness_cursor: {}",
+            bridge_checkpoint_gate_readiness_cursor_step_value
+        );
+        let bridge_checkpoint_gate_readiness_row_count_state =
+            bridge_checkpoint_gate_readiness_cursor_step
+                .checkpoint_gate_readiness_row_count_state();
+        let bridge_checkpoint_gate_readiness_row_count_value =
+            bridge_checkpoint_gate_readiness_row_count_state.count();
+        println!(
+            "    sequence_loop_bridge_checkpoint_gate_readiness_row_count: {}",
+            bridge_checkpoint_gate_readiness_row_count_value
+        );
+        println!(
+            "    sequence_loop_bridge_checkpoint_gate_index: {}",
+            bridge_checkpoint_gate_readiness_cursor_step
+                .checkpoint_gate_readiness
+                .gate_descriptor
+                .gate_index()
+        );
+        println!(
+            "    bridge_checkpoint_gate_readiness_table_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READINESS_TABLE_USED
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_readiness_cursor_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READINESS_CURSOR_USED
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_readiness_cursor_step_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READINESS_CURSOR_STEP_USED
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_construction_table_driven: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_CONSTRUCTION_TABLE_DRIVEN
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_readiness_row_owns_gate_descriptor: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READINESS_ROW_OWNS_GATE_DESCRIPTOR
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_cursor_passes_readiness_row: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_CURSOR_PASSES_READINESS_ROW
+                .satisfied()
+        );
+        println!(
+            "    explicit_checkpoint_gate_builder_literals_removed: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_EXPLICIT_CHECKPOINT_GATE_BUILDER_LITERALS_REMOVED
+                .satisfied()
+        );
+        println!(
+            "    bridge_phase_executor_indexed_checkpoint_gate_helper_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_HELPER_INDEXED
+                .indexed_checkpoint_gate_helper_used()
+        );
+        println!(
+            "    bridge_gates_remain_interleaved: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATES_REMAIN_INTERLEAVED
+                .remain_interleaved()
+        );
+        println!(
+            "    sequence_loop_started: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SEQUENCE_LOOP_STARTED
+                .started()
+        );
+        println!(
+            "    execution_path_changed: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_EXECUTION_PATH_CHANGED
+                .changed()
+        );
+        println!(
+            "    hip_graph_capture_started: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_HIP_GRAPH_CAPTURE_STARTED
+                .started()
+        );
+        Ok(bridge_checkpoint_gate_readiness_cursor_step)
+    }
+
+    fn checkpoint_gate_ready_step(
+        &self,
+        checkpoint_gate_ready_step_lookup_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStepLookupState,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStep> {
+        let bridge_checkpoint_gate =
+            checkpoint_gate_ready_step_lookup_state.bridge_checkpoint_gate();
+        let bridge_checkpoint_gate_ready = self.checkpoint_gate_ready(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyLookupState::from_checkpoint_gate(
+                bridge_checkpoint_gate,
+            ),
+        )?;
+        Ok(self.checkpoint_gate_ready_step_from_gate(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStepFromGateState::from_parts(
+                bridge_checkpoint_gate,
+                bridge_checkpoint_gate_ready,
+            ),
+        ))
+    }
+
+    fn checkpoint_gate_ready_step_from_gate(
+        &self,
+        checkpoint_gate_ready_step_from_gate_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStepFromGateState,
+    ) -> QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStep {
+        let bridge_checkpoint_gate =
+            checkpoint_gate_ready_step_from_gate_state.bridge_checkpoint_gate();
+        let bridge_checkpoint_gate_ready =
+            checkpoint_gate_ready_step_from_gate_state.bridge_checkpoint_gate_ready();
+        QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyStep::new(
+            bridge_checkpoint_gate,
+            bridge_checkpoint_gate_ready,
+        )
+    }
+
+    fn checkpoint_gate_ready(
+        &self,
+        checkpoint_gate_ready_lookup_state:
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyLookupState,
+    ) -> Result<QwenResidentLayerRunnerDenseApplySequenceBridgeLoopCheckpointGateReadyState> {
+        let bridge_checkpoint_gate = checkpoint_gate_ready_lookup_state.bridge_checkpoint_gate();
+        let bridge_checkpoint_gate_plan_ready = bridge_checkpoint_gate.checkpoint_gate_plan_ready();
+        let bridge_checkpoint_gate_ready =
+            bridge_checkpoint_gate_plan_ready.checkpoint_gate_ready_state();
+        let bridge_checkpoint_gate_descriptor = bridge_checkpoint_gate.gate_descriptor;
+        let bridge_checkpoint_gate_controls_checkpoint_invocation_state =
+            bridge_checkpoint_gate_descriptor.controls_checkpoint_invocation_state();
+        let bridge_checkpoint_gate_controls_checkpoint_invocation =
+            bridge_checkpoint_gate_controls_checkpoint_invocation_state.controls();
+        if !bridge_checkpoint_gate_controls_checkpoint_invocation {
+            anyhow::bail!(
+                "resident dense apply sequence bridge checkpoint gate {} does not control a checkpoint invocation",
+                bridge_checkpoint_gate_descriptor.gate_index()
+            );
+        }
+        let bridge_loop_phase = self.phase_descriptor_from_checkpoint_gate_descriptor(
+            QwenResidentLayerRunnerDenseApplySequenceBridgeLoopPhaseDescriptorFromCheckpointGateDescriptorState::from_descriptor(
+                bridge_checkpoint_gate_descriptor,
+            ),
+        )?;
+        if bridge_loop_phase.phase_index() != bridge_checkpoint_gate_descriptor.phase_index() {
+            anyhow::bail!(
+                "resident dense apply sequence bridge checkpoint gate phase {} found descriptor phase {}",
+                bridge_checkpoint_gate_descriptor.phase_index(),
+                bridge_loop_phase.phase_index()
+            );
+        }
+        if bridge_loop_phase.bridge_role != bridge_checkpoint_gate_descriptor.phase_role {
+            anyhow::bail!(
+                "resident dense apply sequence bridge checkpoint gate phase role {} does not match phase table role {}",
+                bridge_checkpoint_gate_descriptor.phase_role,
+                bridge_loop_phase.bridge_role
+            );
+        }
+        println!("  resident_layer_runner_dense_apply_sequence_bridge_loop_checkpoint_gate_stage:");
+        println!("    source: main_dense_apply_sequence_bridge_loop_checkpoint_gate_ready");
+        println!(
+            "    sequence_loop_bridge_checkpoint_gate_index: {}",
+            bridge_checkpoint_gate_descriptor.gate_index()
+        );
+        println!(
+            "    sequence_loop_bridge_checkpoint_gate_phase_index: {}",
+            bridge_checkpoint_gate_descriptor.phase_index()
+        );
+        println!(
+            "    sequence_loop_bridge_checkpoint_gate_role: {}",
+            bridge_checkpoint_gate_descriptor.gate_role
+        );
+        println!(
+            "    sequence_loop_bridge_checkpoint_gate_phase_role: {}",
+            bridge_checkpoint_gate_descriptor.phase_role
+        );
+        println!(
+            "    sequence_loop_bridge_checkpoint_gate_ready: {}",
+            bridge_checkpoint_gate_ready.ready()
+        );
+        println!(
+            "    bridge_checkpoint_gate_ready_step_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_READY_STEP_USED
+                .satisfied()
+        );
+        println!(
+            "    qkv_plan_ready: {}",
+            bridge_checkpoint_gate_plan_ready
+                .qkv_plan_ready_state()
+                .ready()
+        );
+        println!(
+            "    qk_norm_rope_plan_ready: {}",
+            bridge_checkpoint_gate_plan_ready
+                .qk_norm_rope_plan_ready_state()
+                .ready()
+        );
+        println!(
+            "    tp_o_proj_peer_plan_ready: {}",
+            bridge_checkpoint_gate_plan_ready
+                .tp_o_proj_peer_plan_ready_state()
+                .ready()
+        );
+        println!(
+            "    post_attn_norm_prepare_plan_ready: {}",
+            bridge_checkpoint_gate_plan_ready
+                .post_attn_norm_prepare_plan_ready_state()
+                .ready()
+        );
+        println!(
+            "    bridge_checkpoint_gate_descriptor_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_DESCRIPTOR_USED
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_descriptor_bound_to_phase_table: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_DESCRIPTOR_BOUND_TO_PHASE_TABLE
+                .satisfied()
+        );
+        println!(
+            "    bridge_checkpoint_gate_controls_checkpoint_invocation: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_CHECKPOINT_GATE_CONTROLS_CHECKPOINT_INVOCATION
+                .satisfied()
+        );
+        println!(
+            "    bridge_gate_table_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_USED.used()
+        );
+        println!(
+            "    bridge_gate_table_bound_to_phase_table: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_BOUND_TO_PHASE_TABLE
+                .satisfied()
+        );
+        println!(
+            "    bridge_gate_table_represents_all_bridge_gates: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATE_TABLE_REPRESENTS_ALL_BRIDGE_GATES
+                .satisfied()
+        );
+        println!(
+            "    bridge_phase_executor_enclosing_run_used: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_PHASE_EXECUTOR_ENCLOSING_RUN_USED
+                .used()
+        );
+        println!(
+            "    bridge_gates_remain_interleaved: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_GATES_REMAIN_INTERLEAVED
+                .remain_interleaved()
+        );
+        println!(
+            "    sequence_loop_started: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_SEQUENCE_LOOP_STARTED
+                .started()
+        );
+        println!(
+            "    execution_path_changed: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_EXECUTION_PATH_CHANGED
+                .changed()
+        );
+        println!(
+            "    hip_graph_capture_started: {}",
+            QWEN_RESIDENT_LAYER_RUNNER_DENSE_APPLY_SEQUENCE_BRIDGE_LOOP_HIP_GRAPH_CAPTURE_STARTED
+                .started()
+        );
+        Ok(bridge_checkpoint_gate_ready)
+    }
+}

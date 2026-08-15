@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+authors = ["Maincode"]
+repository = "https://github.com/MaincodeHQ/mainarch"
+publish = false
+
+[workspace.dependencies]
+anyhow = "1"
+libc = "0.2"
+clap = { version = "4", features = ["derive"] }
+sha2 = "0.10"
+
+# Thin, fast dev profile — this is a rapid-iteration harness.
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

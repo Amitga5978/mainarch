@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+
+[package]
+name = "mainarch-model-api-plugin-example"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "Standalone external model API plugin example for mainarch."
+
+[dependencies]
+anyhow = "1"
+mainarch-core = { path = "../../crates/mainarch-core" }

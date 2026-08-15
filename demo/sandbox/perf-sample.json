@@ -1,0 +1,30 @@
+{
+  "headline": "Measured on 8x MI355X (gfx950), no ROCm at runtime",
+  "model": "Qwen3-235B-A22B-shaped decode path",
+  "backend": "scripted",
+  "last_updated": "2026-08-14",
+  "win": "These are the three numbers that matter for long-context decode: the per-token collective latency, the attention kernel that reads the KV cache, and how much KV cache you have to read at all. Each is reproducible from this repo with the command named in its source line.",
+  "measurements": [
+    {
+      "name": "64 KiB all-reduce latency",
+      "mainarch": 21.7,
+      "baseline": 29.2,
+      "unit": "us",
+      "source": "mainarch from ONE host thread vs RCCL all_reduce_perf -t 8 -g 1, RCCL's fastest config, same 8 GPUs (mainarch gpu-allreduce-bench)"
+    },
+    {
+      "name": "1M-context decode attention, per head",
+      "mainarch": 33.3,
+      "baseline": 146.0,
+      "unit": "us",
+      "source": "paged + GQA + FP4 capstone kernel vs the FP16 single-head kernel on the same GPU; both bit-close to an f64 reference (mainarch attn-decode)"
+    },
+    {
+      "name": "KV cache bytes per element",
+      "mainarch": 0.5,
+      "baseline": 2.0,
+      "unit": "B",
+      "source": "E2M1 4-bit KV with E8M0 block scales, dequantized in the VALU, vs FP16 KV; ~15% rel-L2 on the primitive, model-quality impact not claimed"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+* text=auto
+
+*.rs text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.cl text eol=lf
+*.txt text eol=lf
+justfile text eol=lf
+Dockerfile* text eol=lf
+
+# Byte-exact fixtures: the model API gate compares these verbatim, so they must
+# not pick up CRLF on a Windows checkout.
+*.receipt text eol=lf
+
+# The compiled gfx950 HSA code object is loaded by our own ELF reader and its
+# sha256 is asserted; never let it through a text filter.
+*.co binary

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A deployable sandbox demo for the mainarch direct GPU serving path.">
+    <title>Mainarch serving sandbox</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="mainarch home">
+          <span class="mark"></span>
+          <span>mainarch</span>
+        </a>
+        <nav class="nav" aria-label="Page sections">
+          <a href="#console">Console</a>
+          <a href="#proof">Proof</a>
+          <a href="#stack">Stack</a>
+        </nav>
+        <div class="status-pill">
+          <span id="statusDot" class="dot" data-mode="scripted"></span>
+          <span id="backendMode">loading backend</span>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="kicker">Sandbox preview for direct MI355X serving</p>
+          <h1>Play with the API seam before the real weights land.</h1>
+          <p class="lead">
+            This is the product shell we can keep: OpenAI-shaped chat, a streaming response,
+            a proof receipt, and a clear route from synthetic preview to real Qwen/Kimi serving.
+          </p>
+          <div class="hero-actions">
+            <a href="#console" class="primary">Run the demo</a>
+            <a href="#stack" class="secondary">See the serving path</a>
+          </div>
+        </div>
+
+        <aside class="hero-board" aria-label="Demo state">
+          <div class="board-top">
+            <span></span><span></span><span></span>
+            <b>serving rail</b>
+          </div>
+          <dl>
+            <div>
+              <dt>Public route</dt>
+              <dd>/v1/chat/completions</dd>
+            </div>
+            <div>
+              <dt>Model lane</dt>
+              <dd id="heroModel">mainarch-preview</dd>
+            </div>
+            <div>
+              <dt>Backend</dt>
+              <dd id="heroBackend">checking</dd>
+            </div>
+            <div>
+              <dt>Proof export</dt>
+              <dd id="heroProof">loading</dd>
+            </div>
+          </dl>
+          <p id="deployHint">Launch locally now; attach a real backend without changing the browser.</p>
+        </aside>
+      </section>
+
+      <section class="route-strip" aria-label="Current route">
+        <div><span>01</span><b>Browser</b><small>One page with a normal prompt surface.</small></div>
+        <div><span>02</span><b>API seam</b><small>Every run calls /v1/chat/completions.</small></div>
+        <div><span>03</span><b>Scheduler shell</b><small>Receipt captures timing and backend mode.</small></div>
+        <div><span>04</span><b>Today</b><small>Synthetic text or upstream-compatible backend.</small></div>
+        <div class="next"><span>05</span><b>Next</b><small>Tokenizer, weights, TP8, megakernel serving.</small></div>
+      </section>
+
+      <section class="workbench" id="console">
+        <div class="chat-card panel">
+          <div class="section-title split">
+            <div>
+              <p>Interactive console</p>
+              <h2 id="modelName">mainarch-preview</h2>
+            </div>
+            <div class="runline" aria-label="Generation status">
+              <span id="runState">idle</span>
+              <span id="runTimer">0.00s</span>
+              <span id="tokenCount">0 chunks</span>
+            </div>
+          </div>
+
+          <div class="scenario-grid" aria-label="Example demo prompts">
+            <button data-example="Give me the 30-second version of what mainarch is proving." data-scenario="30-second demo">30-second demo</button>
+            <button data-example="What is real in this sandbox today, and what is still synthetic?" data-scenario="truth boundary">Truth boundary</button>
+            <button data-example="Why should a direct MI355X serving path beat a normal vLLM or SGLang stack?" data-scenario="speed thesis">Speed thesis</button>
+            <button data-example="What changes when Qwen or Kimi weights replace the proof backend?" data-scenario="real weights path">Real weights path</button>
+          </div>
+
+          <div id="transcript" class="transcript" aria-live="polite"></div>
+
+          <form id="chatForm" class="composer">
+            <textarea id="prompt" rows="4" placeholder="Ask what is live, why the path should be fast, or how Qwen/Kimi plugs in."></textarea>
+            <button id="send" type="submit">Stream</button>
+          </form>
+        </div>
+
+        <aside class="side-rail">
+          <section id="receipt" class="receipt panel" aria-live="polite">
+            <span>demo receipt</span>
+            <b>Run a prompt to get a proof summary.</b>
+            <p>The receipt captures route, backend mode, elapsed time, streamed text count, and whether the answer is synthetic or upstream-backed.</p>
+          </section>
+
+          <section class="flight panel" aria-label="Flight recorder">
+            <div class="section-title">
+              <p>Flight recorder</p>
+              <h2>Last stream</h2>
+            </div>
+            <ol id="flightLog" class="flight-log">
+              <li><b>idle</b><span>waiting for a prompt</span></li>
+            </ol>
+          </section>
+        </aside>
+      </section>
+
+      <section class="proof-grid" id="proof">
+        <div class="panel proof-panel">
+          <div class="section-title">
+            <p>Perf rail</p>
+            <h2 id="perfHeadline">What the sandbox can prove today</h2>
+          </div>
+          <div id="perfGrid" class="perf-grid"></div>
+        </div>
+
+        <aside class="win panel">
+          <span>Win note</span>
+          <p id="winNote">Loading perf note.</p>
+          <div class="boundary">
+            <b>Real now</b>
+            <small>Route, stream parser, receipt, perf rail, and backend swap points.</small>
+          </div>
+          <div class="boundary future">
+            <b>Next swap</b>
+            <small>Tokenizer-backed Qwen/Kimi weights and the real direct serving lane.</small>
+          </div>
+        </aside>
+      </section>
+
+      <section class="stack panel" id="stack">
+        <div class="section-title split">
+          <div>
+            <p>Serving stack</p>
+            <h2>Designed to survive the backend swap.</h2>
+          </div>
+          <button id="copyCurl" class="ghost" type="button">Copy curl</button>
+        </div>
+
+        <div class="stack-map">
+          <article><span>surface</span><b>Browser and curl</b><p>Normal chat UX plus OpenAI-shaped HTTP clients.</p></article>
+          <article><span>contract</span><b>/v1/models and /v1/chat/completions</b><p>The API route does not change when real weights land.</p></article>
+          <article><span>scheduler</span><b>Admission and receipts</b><p>Visible timing and request state rather than a black-box spinner.</p></article>
+          <article><span>backend</span><b>Scripted, command, or upstream</b><p>Static container today, real server behind the seam tomorrow.</p></article>
+          <article><span>kernel</span><b>MI355X direct path</b><p>The core work returns behind the same product shell.</p></article>
+        </div>
+
+        <pre id="curlBlock">curl http://HOST:8080/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"mainarch-preview","stream":true,"messages":[{"role":"user","content":"why is this fast?"}]}'</pre>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
